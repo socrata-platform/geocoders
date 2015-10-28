@@ -1,0 +1,7 @@
+/src_managed/
+/lib_managed/
+target/
+/test/
+/test-out/
+.idea*/
+
