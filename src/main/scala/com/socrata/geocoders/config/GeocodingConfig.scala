@@ -28,7 +28,7 @@ class GeocodingCacheConfig(config: Config, root: String) extends ConfigClass(con
 class CassandraCacheConfig(config: Config, root: String) extends ConfigClass(config, root) {
   val columnFamily = getString("column-family")
   val ttl = getDuration("ttl")
-  val cassandra = getConfig("cassandra", new CassandraConnectionPoolConfig(_, _)
+  val cassandra = getConfig("cassandra", new CassandraConnectionPoolConfig(_, _))
 }
 
 class CassandraConfig(config: Config, root: String) extends ConfigClass(config, root) {
