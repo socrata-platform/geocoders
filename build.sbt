@@ -1,15 +1,15 @@
 import sbt._
 
-val rojomaJsonV3 = "com.rojoma" %% "rojoma-json-v3" % "[3.2.0,4.0.0)"
-val rojomaSimpleArm = "com.rojoma" %% "simple-arm" % "1.2.0"
-
-val socrataHttpVersion = "3.3.2"
-val socrataHttpClient = "com.socrata" %% "socrata-http-client" % socrataHttpVersion
-
 def astyanaxExcludes(x: ModuleID) = x exclude ("commons-logging", "commons-logging") exclude ("org.mortbay.jetty", "servlet-api") exclude ("javax.servlet", "servlet-api")
 val astyanaxVersion =  "1.56.48"
 val astyanaxCassandra = astyanaxExcludes("com.netflix.astyanax" % "astyanax-cassandra" % astyanaxVersion)
-val astyanaxThrift = astyanaxExcludes("com.netflix.astyanax" % "astyanax-thrift" % astyanaxVersion)
+
+val rojomaJsonV3            = "com.rojoma"  %% "rojoma-json-v3"             % "[3.2.0,4.0.0)"
+
+val socrataHttpClient       = "com.socrata" %% "socrata-http-client"        % "3.3.2"
+val socrataThirdPartyUtils  = "com.socrata" %% "socrata-thirdparty-utils"   % "3.1.2"
+
+val typesafeConfig          = "com.typesafe" % "config"                     % "1.0.2"
 
 lazy val commonSettings = Seq(
   organization := "com.socrata",
@@ -25,7 +25,8 @@ lazy val root = (project in file(".")).
       rojomaJsonV3,
       socrataHttpClient,
       astyanaxCassandra,
-      astyanaxThrift
+      typesafeConfig,
+      socrataThirdPartyUtils
     ),
     com.socrata.sbtplugins.StylePlugin.StyleKeys.styleCheck in Test := {},
     com.socrata.sbtplugins.StylePlugin.StyleKeys.styleCheck in Compile := {},

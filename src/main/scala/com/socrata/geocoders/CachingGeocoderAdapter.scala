@@ -1,84 +1,12 @@
 package com.socrata.geocoders
 
-import com.netflix.astyanax.Keyspace
-import com.netflix.astyanax.model.ColumnFamily
-import com.netflix.astyanax.serializers.StringSerializer
-import com.rojoma.json.v3.codec.JsonEncode
-import com.rojoma.json.v3.io.CompactJsonWriter
-import com.rojoma.json.v3.ast._
-import com.rojoma.json.v3.util.JsonUtil
+import com.socrata.geocoders.caching.CacheClient
 
-import scala.collection.immutable.SortedMap
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration.FiniteDuration
-import scala.collection.JavaConverters._
 
-class CachingGeocoderAdapter(keyspace: Keyspace, columnFamilyName: String, cacheTime: FiniteDuration, underlying: Geocoder, cachedCounter: Long => Unit, multiplier: Int = 1) extends Geocoder {
+
+class CachingGeocoderAdapter(cacheClient: CacheClient, underlying: Geocoder, cachedCounter: Long => Unit, multiplier: Int = 1) extends Geocoder {
   val log = org.slf4j.LoggerFactory.getLogger(classOf[CachingGeocoderAdapter])
-
-  val cacheTTL: java.lang.Integer = cacheTime.toSeconds.toInt
-
-  val columnFamily = new ColumnFamily(columnFamilyName,
-    StringSerializer.get,
-    StringSerializer.get)
-
-  val column = "coords"
-
-  private def json(x: Option[String]) = x.fold[JValue](JNull)(JString)
-
-  // this encoder produces a _canonical_ encoding of the address -- in particular, the fields are
-  // sorted.
-  val addressEncoder = new JsonEncode[Address] {
-    override def encode(address: Address): JValue = {
-      val Address(street, city, state, zip, country) = address
-      val intermediate = SortedMap.newBuilder[String, String]
-      street.foreach(intermediate += "street" -> _)
-      city.foreach(intermediate += "city" -> _)
-      state.foreach(intermediate += "state" -> _)
-      zip.foreach(intermediate += "zip" -> _)
-      intermediate += "country" -> country
-      JsonEncode.toJValue(intermediate.result())
-    }
-  }
-
-  private def toRowIdentifier(address: Address): String = {
-    CompactJsonWriter.toString(addressEncoder.encode(address))
-  }
-
-  private def lookup(addresses: Seq[Address]): Seq[Option[Option[LatLon]]] = {
-    // postcondition: result.length == addresses.length
-    val rows = addresses.map(toRowIdentifier)
-    val result = keyspace.prepareQuery(columnFamily).
-      getRowSlice(rows.asJava).
-      withColumnSlice(column).
-      execute()
-    (addresses, rows).zipped.map { (addr, row) =>
-      Option(result.getResult.getRow(row)).flatMap { row =>
-        Option(row.getColumns.getStringValue(column, null)).flatMap { col =>
-          JsonUtil.parseJson[Either[JNull, (JNumber, JNumber)]](col) match {
-            case Right(Right((lat, lon))) => Some(Some(LatLon(lat.toDouble, lon.toDouble)))
-            case Right(Left(JNull)) => Some(None)
-            case Left(_) => None
-          }
-        }
-      }
-    }
-  }
-
-  private def cache(addresses: Seq[(Address, Option[LatLon])]) {
-    if(addresses.nonEmpty) {
-      val mutation = keyspace.prepareMutationBatch
-      for((address, coordinates) <- addresses) {
-        val payload: Either[JNull, (JNumber,JNumber)] =
-          coordinates match {
-            case Some(LatLon(lat, lon)) => Right((JNumber(lat), JNumber(lon)))
-            case None                   => Left(JNull)
-          }
-        mutation.withRow(columnFamily, toRowIdentifier(address)).putColumn(column, JsonUtil.renderJson(payload, pretty=false), cacheTTL)
-      }
-      mutation.execute()
-    }
-  }
 
   override def batchSize: Int = underlying.batchSize * multiplier
 
@@ -122,7 +50,7 @@ class CachingGeocoderAdapter(keyspace: Keyspace, columnFamilyName: String, cache
     // We may already have some of the addresses cached.
     // "cached" will be the same length as "toGeocode" with
     // Some(Option[LatLon]) where something was cached and None where it was not.
-    val cached = lookup(toGeocode)
+    val cached = cacheClient.lookup(toGeocode)
     assert(cached.length == toGeocode.length)
     val cachedCount = cached.count(_.isDefined)
     if(cachedCount != 0) {
@@ -138,7 +66,7 @@ class CachingGeocoderAdapter(keyspace: Keyspace, columnFamilyName: String, cache
       assert(fresh.length == uncached.length) // there must be one result for each hole in "cached"
 
       // Ok, stick the results of geocoding in the cache.
-      cache(uncached.zip(fresh))
+      cacheClient.cache(uncached.zip(fresh))
 
       // we'll be simultaneously scanning across "cached", "fresh",
       // and "dedupedResult" at different rates.
