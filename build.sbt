@@ -11,7 +11,6 @@ val astyanaxVersion =  "1.56.48"
 val astyanaxCassandra = astyanaxExcludes("com.netflix.astyanax" % "astyanax-cassandra" % astyanaxVersion)
 val astyanaxThrift = astyanaxExcludes("com.netflix.astyanax" % "astyanax-thrift" % astyanaxVersion)
 
-
 lazy val commonSettings = Seq(
   organization := "com.socrata",
   version := "0.1.0",
@@ -27,5 +26,9 @@ lazy val root = (project in file(".")).
       socrataHttpClient,
       astyanaxCassandra,
       astyanaxThrift
-    )
+    ),
+    com.socrata.sbtplugins.StylePlugin.StyleKeys.styleCheck in Test := {},
+    com.socrata.sbtplugins.StylePlugin.StyleKeys.styleCheck in Compile := {},
+    com.socrata.sbtplugins.findbugs.JavaFindBugsPlugin.JavaFindBugsKeys.findbugsFailOnError in Test := false,
+    com.socrata.sbtplugins.findbugs.JavaFindBugsPlugin.JavaFindBugsKeys.findbugsFailOnError in Compile := false
   )
