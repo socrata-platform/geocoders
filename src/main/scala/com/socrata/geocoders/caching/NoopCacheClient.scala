@@ -2,7 +2,7 @@ package com.socrata.geocoders.caching
 
 import com.socrata.geocoders.{Address, LatLon}
 
-class NoopCashClient extends CacheClient {
+class NoopCacheClient extends CacheClient {
   override def cache(addresses: Seq[(Address, Option[LatLon])]): Unit = {
     // do nothing! :D
   }
