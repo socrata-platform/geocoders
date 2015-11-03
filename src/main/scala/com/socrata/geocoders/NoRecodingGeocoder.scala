@@ -11,7 +11,7 @@ class NoRecodingGeocoder(underlying: Geocoder, multiplier: Int = 1) extends Geoc
     val result = new ArrayBuffer[Location](locations.length)
     val toGeocode = new ArrayBuffer[Location](locations.length)
     locations foreach { location =>
-      location.coordinate match {
+      location.coordinates match {
           case Some(latLon) => result += location
           case None => result += null; toGeocode += location
         }

@@ -11,6 +11,8 @@ val socrataThirdPartyUtils  = "com.socrata" %% "socrata-thirdparty-utils"   % "4
 
 val typesafeConfig          = "com.typesafe" % "config"                     % "1.0.2"
 
+
+
 lazy val commonSettings = Seq(
   organization := "com.socrata",
   version := "0.1.0",
