@@ -11,10 +11,10 @@ trait CacheClient {
   // this encoder produces a _canonical_ encoding of the
   // address -- in particular, the fields are sorted.
   val addressEncoder = new JsonEncode[Address] {
-    override def encode(address: Address): JValue = {
-      val Address(street, city, state, zip, country) = address
+    override def encode(addr: Address): JValue = {
+      val Address(address, city, state, zip, country) = addr
       val intermediate = SortedMap.newBuilder[String, String]
-      street.foreach(intermediate += "street" -> _)
+      address.foreach(intermediate += "address" -> _)
       city.foreach(intermediate += "city" -> _)
       state.foreach(intermediate += "state" -> _)
       zip.foreach(intermediate += "zip" -> _)

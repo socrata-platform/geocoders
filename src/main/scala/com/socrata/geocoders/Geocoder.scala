@@ -46,14 +46,15 @@ trait OptionalGeocoder {
   }
 }
 
-case class Address(street: Option[String], city: Option[String], state: Option[String], zip: Option[String], country: String) {
+case class Address(address: Option[String], city: Option[String], state: Option[String], zip: Option[String], country: String) {
   // this deliberately excludes "country" because we _always_ have a country (we default to US)
-  def isDefined: Boolean = street.isDefined || city.isDefined || state.isDefined || zip.isDefined
+  def isDefined: Boolean = address.isDefined || city.isDefined || state.isDefined || zip.isDefined
 }
 
 object Address {
-  def apply(street: Option[String], city: Option[String], state: Option[String], zip: Option[String], country: Option[String]): Address = {
-    Address(street, city, state, zip, country.getOrElse("US"))
+  // filter out empty strings to None and default country to US
+  def apply(address: Option[String], city: Option[String], state: Option[String], zip: Option[String], country: Option[String]): Address = {
+    Address(address.filter(_.nonEmpty), city.filter(_.nonEmpty), state.filter(_.nonEmpty), zip.filter(_.nonEmpty), country.filter(_.nonEmpty).getOrElse("US")) //TODO: make default country configurable
   }
 }
 
@@ -63,4 +64,4 @@ object LatLon {
   implicit val llCodec = AutomaticJsonCodecBuilder[LatLon]
 }
 
-case class Location(address: Address, coordinate: Option[LatLon])
+case class Location(address: Address, coordinates: Option[LatLon])

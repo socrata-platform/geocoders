@@ -11,19 +11,19 @@ import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, JsonUtil, AutomaticJ
 import com.socrata.http.client.exceptions.{ContentTypeException, HttpClientException}
 import com.socrata.http.client.{RequestBuilder, HttpClient}
 
-class MapQuestGeocoder(http: HttpClient, appKey: String, retryCount: Int = 5, metricProvider: (GeocodingResult, Long) => Unit) extends Geocoder {
+class MapQuestGeocoder(http: HttpClient, appKey: String, batchBy: Int = 100, retryCount: Int = 5, metricProvider: (GeocodingResult, Long) => Unit) extends Geocoder {
   val log = org.slf4j.LoggerFactory.getLogger(classOf[MapQuestGeocoder])
 
-  override def batchSize: Int = 100 // MapQuest supports batch geocoding up to 100 locations
+  override def batchSize = batchBy // MapQuest (currently) supports batch geocoding up to 100 locations
 
   override def geocode(addresses: Seq[Address]): Seq[Option[LatLon]] =
     addresses.grouped(batchSize).flatMap(geocodeBatch(metricProvider( _, _), _)).toVector
 
-  private def cleanAddress(addr: String): String =
-    addr.dropWhile(_ == '%') // work around mapquest bug
+  private def cleanAddress(address: String): String =
+    address.dropWhile(_ == '%') // work around mapquest bug
 
-  private def encodeForMQ(addr: Address): Map[String, String] = {
-    val Address(street, city, state, zip, country) = addr
+  private def encodeForMQ(address: Address): Map[String, String] = {
+    val Address(street, city, state, zip, country) = address
     val mb = Map.newBuilder[String, String]
     street.foreach { str => mb += "street" -> cleanAddress(str) }
     city.foreach(mb += "adminArea5" -> _)
@@ -90,13 +90,14 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, retryCount: Int = 5, me
     def minCityGranularity = GAdminArea(5)
     def minStateGranularity = GAdminArea(3)
 
-    def isAcceptable(addr: Address): Boolean = {
-      if(addr.street.isDefined && (geocodeQualityCode.fsnConfidence == NoMeaningOrUnused || geocodeQualityCode.granularity < minAddressGranularity)) return false
-      if(addr.city.isDefined && (geocodeQualityCode.aaConfidence == NoMeaningOrUnused || geocodeQualityCode.granularity < minCityGranularity)) return false
-      if(addr.state.isDefined && (geocodeQualityCode.aaConfidence == NoMeaningOrUnused || geocodeQualityCode.granularity < minStateGranularity)) return false
+    def isAcceptable(address: Address): Boolean = {
+      val Address(street, city, state, zip, country) = address
+      if(street.isDefined && (geocodeQualityCode.fsnConfidence == NoMeaningOrUnused || geocodeQualityCode.granularity < minAddressGranularity)) return false
+      if(city.isDefined && (geocodeQualityCode.aaConfidence == NoMeaningOrUnused || geocodeQualityCode.granularity < minCityGranularity)) return false
+      if(state.isDefined && (geocodeQualityCode.aaConfidence == NoMeaningOrUnused || geocodeQualityCode.granularity < minStateGranularity)) return false
       // zips are kind of special; we can (and indeed must) ignore them if we specified city or address
       // and the above checks passed.  In particular, this allows "Garden Grove, CA 92642" to pass.
-      if(addr.zip.isDefined && geocodeQualityCode.pcConfidence == NoMeaningOrUnused && !(addr.street.isDefined || addr.city.isDefined)) return false
+      if(zip.isDefined && geocodeQualityCode.pcConfidence == NoMeaningOrUnused && !(street.isDefined || city.isDefined)) return false
       true
     }
   }
