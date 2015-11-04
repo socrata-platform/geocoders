@@ -11,10 +11,10 @@ import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, JsonUtil, AutomaticJ
 import com.socrata.http.client.exceptions.{ContentTypeException, HttpClientException}
 import com.socrata.http.client.{RequestBuilder, HttpClient}
 
-class MapQuestGeocoder(http: HttpClient, appKey: String, batchBy: Int = 100, retryCount: Int = 5, metricProvider: (GeocodingResult, Long) => Unit) extends Geocoder {
+class MapQuestGeocoder(http: HttpClient, appKey: String, retryCount: Int = 5, metricProvider: (GeocodingResult, Long) => Unit) extends Geocoder {
   val log = org.slf4j.LoggerFactory.getLogger(classOf[MapQuestGeocoder])
 
-  override def batchSize = batchBy // MapQuest (currently) supports batch geocoding up to 100 locations
+  override def batchSize = 100 // MapQuest (currently) supports batch geocoding of up to 100 locations
 
   override def geocode(addresses: Seq[Address]): Seq[Option[LatLon]] =
     addresses.grouped(batchSize).flatMap(geocodeBatch(metricProvider( _, _), _)).toVector

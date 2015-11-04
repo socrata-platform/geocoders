@@ -16,7 +16,6 @@ class GeocodingConfig(config: Config, root: String) extends ConfigClass(config, 
 
 class MapQuestGeocodingConfig(config: Config, root: String) extends ConfigClass(config, root) {
   val appToken = getString("app-token")
-  val batchSize = getString("batch-size")  // MapQuest supports batch geocoding up to 100 locations
   val retryCount = getInt("retry-count")
 }
 
