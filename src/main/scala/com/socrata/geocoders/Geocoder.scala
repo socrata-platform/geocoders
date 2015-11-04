@@ -10,15 +10,6 @@ trait Geocoder {
    * @return The addresses, in the same order, geocoded.
    */
   def geocode(addresses: Seq[Address]): Seq[Option[LatLon]]
-
-  /**
-   * @param locations Locations to geocode
-   * @return The locations, in the same order, geocoded.
-   */
-  def geocodeLocations(locations: Seq[Location]): Seq[Location] = {
-    val addresses = locations.map(_.address)
-    (addresses, geocode(addresses)).zipped.map(Location)
-  }
 }
 
 trait OptionalGeocoder {
@@ -29,21 +20,6 @@ trait OptionalGeocoder {
    * @return The addresses, in the same order, geocoded.
    */
   def geocode(addresses: Seq[Option[Address]]): Seq[Option[LatLon]]
-
-  /**
-   * @param locations Locations to geocode
-   * @return The locations, in the same order, geocoded.
-   */
-  def geocodeLocations(locations: Seq[Option[Location]]): Seq[Option[Location]] = {
-    val addresses = locations.map(_.map(_.address))
-    (addresses, geocode(addresses)).zipped.map { (addressesOpt, latLonOpt) =>
-      (addressesOpt, latLonOpt) match {
-        case (Some(address), coordinates) => Some(Location(address, coordinates))
-        case (None, None) => None
-        case (None, _) => sys.error("Impossible: received a location for a nonexistent address")
-      }
-    }
-  }
 }
 
 case class Address(address: Option[String], city: Option[String], state: Option[String], zip: Option[String], country: String) {
@@ -64,4 +40,4 @@ object LatLon {
   implicit val llCodec = AutomaticJsonCodecBuilder[LatLon]
 }
 
-case class Location(address: Address, coordinates: Option[LatLon])
+//case class Location(address: Address, coordinates: Option[LatLon])

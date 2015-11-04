@@ -21,16 +21,6 @@ object TestValues {
   val sll2 = None
   val sll3 = Some(ll3)
 
-  val loc0 = Location(addr0, sll0)
-  val loc1 = Location(addr1, sll1)
-  val loc2 = Location(addr2, sll2)
-  val loc3 = Location(addr3, sll3)
-
-  val sloc0 = Some(loc0)
-  val sloc1 = Some(loc1)
-  val sloc2 = Some(loc2)
-  val sloc3 = Some(loc3)
-
   val expected = Map(
     addr0 -> ll0,
     addr1 -> ll1,
@@ -39,14 +29,11 @@ object TestValues {
 
   val addresses   = Seq(addr0, addr1, addr2, addr3)
   val coordinates = Seq( sll0,  sll1,  sll2,  sll3)
-  val locations   = Seq( loc0,  loc1,  loc2,  loc3)
 
   val someAddresses = addresses.map(Some(_))
-  val someLocations = locations.map(Some(_))
 
   val addressesWithNones   = Seq(saddr0, None, saddr1, saddr2, None, saddr3, None)
   val coordinatesWithNones = Seq(  sll0, None,   sll1,   sll2, None,   sll3, None)
-  val locationsWithNones   = Seq( sloc0, None,  sloc1,  sloc2, None,  sloc3, None)
 
   val mockGeocoder = new Geocoder {
     override def batchSize: Int = 1
