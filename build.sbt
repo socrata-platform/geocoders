@@ -13,7 +13,7 @@ val typesafeConfig          = "com.typesafe" % "config"                     % "1
 
 lazy val commonSettings = Seq(
   organization := "com.socrata",
-  version := "1.0.0",
+  version := "1.0.4",
   scalaVersion := "2.10.4"
 )
 
