@@ -11,7 +11,7 @@ import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, JsonUtil, AutomaticJ
 import com.socrata.http.client.exceptions.{ContentTypeException, HttpClientException}
 import com.socrata.http.client.{RequestBuilder, HttpClient}
 
-class MapQuestGeocoder(http: HttpClient, appKey: String, retryCount: Int = 5, metricProvider: (GeocodingResult, Long) => Unit) extends Geocoder {
+class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (GeocodingResult, Long) => Unit, retryCount: Int = 5) extends Geocoder {
   val log = org.slf4j.LoggerFactory.getLogger(classOf[MapQuestGeocoder])
 
   override def batchSize = 100 // MapQuest (currently) supports batch geocoding of up to 100 locations
