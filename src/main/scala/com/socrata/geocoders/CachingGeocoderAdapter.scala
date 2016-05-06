@@ -1,20 +1,23 @@
 package com.socrata.geocoders
 
+import com.rojoma.json.v3.ast.JValue
 import com.socrata.geocoders.caching.CacheClient
 
 import scala.collection.mutable.ArrayBuffer
 
 
-class CachingGeocoderAdapter(cacheClient: CacheClient, underlying: Geocoder, cachedCounter: Long => Unit, multiplier: Int = 1) extends Geocoder {
+class CachingGeocoderAdapter(cacheClient: CacheClient, underlying: BaseGeocoder, cachedCounter: Long => Unit, multiplier: Int = 1) extends Geocoder {
   val log = org.slf4j.LoggerFactory.getLogger(classOf[CachingGeocoderAdapter])
 
   override def batchSize: Int = underlying.batchSize * multiplier
 
-  override def geocode(addresses: Seq[Address]): Seq[Option[LatLon]] = {
+  override def geocode(addresses: Seq[InternationalAddress]): Seq[Option[LatLon]] = {
+    if (addresses.isEmpty) return Seq.empty // don't go out to the cache here
+
     // ok.  This is somewhat subtle.  The problem: we want to geocode the least possible.
     // So: first let's de-dup the addresses, remembering where in "addresses" they
-    // came from.  "deduped" is a map from the unique Address objects to their indexes.
-    val deduped = addresses.iterator.zipWithIndex.foldLeft(Map.empty[Address, List[Int]]) { (acc, addrAndIndex) =>
+    // came from.  "deduped" is a map from the unique InternationalAddress objects to their indexes.
+    val deduped = addresses.iterator.zipWithIndex.foldLeft(Map.empty[InternationalAddress, List[Int]]) { (acc, addrAndIndex) =>
       val (addr, idx) = addrAndIndex
       val idxes = idx :: acc.getOrElse(addr, Nil)
       acc + (addr -> idxes)
@@ -28,30 +31,13 @@ class CachingGeocoderAdapter(cacheClient: CacheClient, underlying: Geocoder, cac
     // This will hold the geocoded addresses, when all is done.
     // It is important that dedupedResult(i) == geocode(orderedDeduped(i))
     // because this is how we'll populate the result.
-    val dedupedResult = new ArrayBuffer[Option[LatLon]](deduped.size)
-
-    // Not all addreses will need geocoding.  This holds only the addresses
-    // that need geocoding, preserving order.
-    val toGeocode = new ArrayBuffer[Address](deduped.size)
-
-    // Only keep addresses that have some street, city, state, or zip.
-    // Addresses that are not defined should get the result of None.
-    // We'll store them in the right place in dedupedResults straight
-    // away.
-    for(address <- orderedDeduped) {
-      if(!address.isDefined) { dedupedResult += None }
-      else { dedupedResult += null; toGeocode += address }
-    }
-    assert(dedupedResult.length == orderedDeduped.length)
-
-    // If all addresses are not defined (and we don't need to geocode), we can just return all Nones
-    if(toGeocode.isEmpty) return addresses.map(_ => None)
+    val dedupedResult = new Array[Option[LatLon]](deduped.size)
 
     // We may already have some of the addresses cached.
-    // "cached" will be the same length as "toGeocode" with
+    // "cached" will be the same length as "orderedDeduped" with
     // Some(Option[LatLon]) where something was cached and None where it was not.
-    val cached = cacheClient.lookup(toGeocode)
-    assert(cached.length == toGeocode.length)
+    val cached = cacheClient.lookup(orderedDeduped)
+    assert(cached.length == orderedDeduped.length)
     val cachedCount = cached.count(_.isDefined)
     if(cachedCount != 0) {
       log.info("Avoided re-geocoding {} addresses via the cache", cachedCount)
@@ -59,10 +45,10 @@ class CachingGeocoderAdapter(cacheClient: CacheClient, underlying: Geocoder, cac
     }
 
     // These are the ones that were not cached. We'll actually have to geocode those.
-    val uncached = cached.zip(toGeocode).collect { case (None, ungeocoded) => ungeocoded }
+    val uncached = cached.zip(orderedDeduped).collect { case (None, ungeocoded) => ungeocoded }
 
     // Called to fill "dedupedResult" after geocoding actually happens.
-    def reconstructResult(fresh: Seq[Option[LatLon]]) {
+    def reconstructResult(fresh: Seq[(Option[LatLon], JValue)]) {
       assert(fresh.length == uncached.length) // there must be one result for each hole in "cached"
 
       // Ok, stick the results of geocoding in the cache.
@@ -75,18 +61,18 @@ class CachingGeocoderAdapter(cacheClient: CacheClient, underlying: Geocoder, cac
       var dst = 0
 
       def setResult(coordinate: Option[LatLon]) {
-        while(dedupedResult(dst) ne null) dst += 1
         dedupedResult(dst) = coordinate
+        dst += 1
       }
 
       cacheIt.foreach {
         case Some(cachedCoordinate) => setResult(cachedCoordinate)
-        case None  => setResult(freshIt.next())
+        case None  => setResult(freshIt.next()._1)
       }
       assert(freshIt.isEmpty)
     }
 
-    if(uncached.isEmpty) reconstructResult(Seq[Option[LatLon]]()) // Nothing to do; don't even bother going down a level
+    if(uncached.isEmpty) reconstructResult(Seq[(Option[LatLon], JValue)]()) // Nothing to do; don't even bother going down a level
     else reconstructResult(underlying.geocode(uncached).toIndexedSeq)
 
     assert(dedupedResult.length == orderedDeduped.length)

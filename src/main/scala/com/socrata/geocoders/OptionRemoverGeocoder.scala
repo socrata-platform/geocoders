@@ -5,9 +5,9 @@ import scala.collection.mutable.ArrayBuffer
 class OptionRemoverGeocoder(underlying: Geocoder, multiplier: Int = 1) extends OptionalGeocoder {
   override def batchSize: Int = underlying.batchSize * multiplier
 
-  override def geocode(addresses: Seq[Option[Address]]): Seq[Option[LatLon]] = {
+  override def geocode(addresses: Seq[Option[InternationalAddress]]): Seq[Option[LatLon]] = {
     val result = new ArrayBuffer[Option[LatLon]](addresses.length)
-    val toGeocode = new ArrayBuffer[Address](addresses.length)
+    val toGeocode = new ArrayBuffer[InternationalAddress](addresses.length)
     addresses foreach {
       case Some(address) => result += null; toGeocode += address
       case None => result += None

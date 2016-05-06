@@ -1,5 +1,6 @@
 package com.socrata.geocoders
 
+import com.rojoma.json.v3.ast.JNull
 import com.socrata.geocoders.caching.MapCacheClient
 
 class CachingGeocoderAdapterTest extends BaseTest {
@@ -8,20 +9,20 @@ class CachingGeocoderAdapterTest extends BaseTest {
   def withMocks[A](f: (MapCacheClient, MockMetric, Geocoder) => A) = {
     val metric = new MockMetric
     val cache = new MapCacheClient
-    val geocoder = new CachingGeocoderAdapter(cache, mockGeocoder, metric.increment)
+    val geocoder = new CachingGeocoderAdapter(cache, mockBaseGeocoder, metric.increment)
     f(cache, metric, geocoder)
   }
 
   test("Should be able to geocode an empty sequence") {
     withMocks { (_, metric, instance) =>
-      instance.geocode(Seq[Address]()).size should be (0)
+      instance.geocode(Seq[InternationalAddress]()).size should be (0)
       metric.count should be (0)
     }
 
     withMocks { (cache, metric, instance) =>
-      val toCache = addresses.zip(coordinates)
+      val toCache = addresses.zip(coordinates.map { coord => (coord, JNull) })
       cache.cache(toCache)
-      instance.geocode(Seq[Address]()).size should be (0)
+      instance.geocode(Seq[InternationalAddress]()).size should be (0)
       metric.count should be (0)
       cache.cached should be (toCache.length)
     }
@@ -37,7 +38,7 @@ class CachingGeocoderAdapterTest extends BaseTest {
 
   test("Should cache all geocoding results when the cache does not contain any of the values") {
     withMocks { (cache, metric, instance) =>
-      val toCache = Seq((Address(Some("not_in_sequence"), None, None, None, None), None))
+      val toCache = Seq((InternationalAddress(Some("not_in_sequence"), None, None, None, None, "US"), (None, JNull)))
       cache.cache(toCache)
       instance.geocode(addresses) should be(coordinates)
       metric.count should be(0)
@@ -47,7 +48,7 @@ class CachingGeocoderAdapterTest extends BaseTest {
 
   test("Should use values found in the cache instead of regeocoding") {
     withMocks { (cache, metric, instance) =>
-      val toCache = Seq((addr1, sll1), (addr2, sll2))
+      val toCache = Seq((addr1, (sll1, JNull)), (addr2, (sll2, JNull)))
       cache.cache(toCache)
       instance.geocode(addresses) should be(coordinates)
       metric.count should be(2)
@@ -59,7 +60,7 @@ class CachingGeocoderAdapterTest extends BaseTest {
         case Some(LatLon(lat, lon)) => Some(LatLon(lat + 1.0, lon - 1.0))
         case None => Some(LatLon(0.0, 0.0))
       }
-      val toCache = addresses.zip(modifiedCoordinates)
+      val toCache = addresses.zip(modifiedCoordinates.map { coord => (coord, JNull) })
       cache.cache(toCache)
       instance.geocode(addresses) should be(modifiedCoordinates) // cache values are different then base geocoding
       metric.count should be(modifiedCoordinates.length)
@@ -75,36 +76,17 @@ class CachingGeocoderAdapterTest extends BaseTest {
     }
 
     withMocks { (cache, metric, instance) =>
-      cache.cache(Seq((addr3, sll3)))
+      cache.cache(Seq((addr3, (sll3, JNull))))
       instance.geocode(addresses ++ Seq(addr3, addr3)) should be(coordinates ++ Seq(sll3, sll3))
       metric.count should be(3) // addr3 in cache and both duplicate values
       cache.cached should be(addresses.length)
     }
 
     withMocks { (cache, metric, instance) =>
-      cache.cache(Seq((addr2, sll2)))
+      cache.cache(Seq((addr2, (sll2, JNull))))
       instance.geocode(addresses ++ Seq(addr3, addr0)) should be(coordinates ++ Seq(sll3, sll0))
       metric.count should be(3) // addr2 in the cache, duplicates of addr0, addr3
       cache.cached should be(addresses.length)
-    }
-  }
-
-  test("Should be able to geocode undefined addresses to None") {
-    val undefined = Address(None, None, None, None, None)
-
-    // we don't cache undefined addresses
-    // because we skip geocoding with the underlying geocoder
-
-    withMocks { (cache, metric, instance) =>
-      instance.geocode(Seq(undefined)) should be (Seq(None))
-      metric.count should be (0)
-      cache.cached should be (0)
-    }
-
-    withMocks { (cache, metric, instance) =>
-      instance.geocode(Seq(addr0, undefined, addr2, undefined, addr3)) should be (Seq(sll0, None, sll2, None, sll3))
-      metric.count should be (1)
-      cache.cached should be (3)
     }
   }
 }
