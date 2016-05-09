@@ -5,30 +5,31 @@ import java.io.IOException
 import com.rojoma.json.v3.codec.JsonDecode.DecodeResult
 import com.rojoma.json.v3.interpolation._
 import com.rojoma.json.v3.io.{JsonReaderException, JValueEventIterator}
-import com.rojoma.json.v3.ast.{JValue, JString}
+import com.rojoma.json.v3.ast.{JNull, JValue, JString}
 import com.rojoma.json.v3.codec.{DecodeError, JsonDecode}
 import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, JsonUtil, AutomaticJsonDecodeBuilder}
 import com.socrata.http.client.exceptions.{ContentTypeException, HttpClientException}
 import com.socrata.http.client.{RequestBuilder, HttpClient}
 
-class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (GeocodingResult, Long) => Unit, retryCount: Int = 5) extends Geocoder {
+class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (GeocodingResult, Long) => Unit, retryCount: Int = 5) extends BaseGeocoder {
   val log = org.slf4j.LoggerFactory.getLogger(classOf[MapQuestGeocoder])
 
   override def batchSize = 100 // MapQuest (currently) supports batch geocoding of up to 100 locations
 
-  override def geocode(addresses: Seq[Address]): Seq[Option[LatLon]] =
+  override def geocode(addresses: Seq[InternationalAddress]): Seq[(Option[LatLon], JValue)] =
     addresses.grouped(batchSize).flatMap(geocodeBatch(metricProvider( _, _), _)).toVector
 
   private def cleanAddress(address: String): String =
     address.dropWhile(_ == '%') // work around mapquest bug
 
-  private def encodeForMQ(address: Address): Map[String, String] = {
-    val Address(street, city, state, zip, country) = address
+  private def encodeForMQ(addr: InternationalAddress): Map[String, String] = {
+    val InternationalAddress(address, locality, subregion, region, postalCode, country) = addr
     val mb = Map.newBuilder[String, String]
-    street.foreach { str => mb += "street" -> cleanAddress(str) }
-    city.foreach(mb += "adminArea5" -> _)
-    state.foreach(mb += "adminArea3" -> _)
-    zip.foreach(mb += "postalCode" -> _)
+    address.foreach { str => mb += "street" -> cleanAddress(str) }
+    locality.foreach(mb += "adminArea5" -> _)
+    subregion.foreach(mb += "adminArea4" -> _)
+    region.foreach(mb += "adminArea3" -> _)
+    postalCode.foreach(mb += "postalCode" -> _)
     mb += "adminArea1" -> country
     mb.result()
   }
@@ -54,11 +55,15 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
   private case object Approximate extends Confidence
   private case object NoMeaningOrUnused extends Confidence
 
-  private case class QualityCode(granularity: Granularity, fsnConfidence: Confidence, aaConfidence: Confidence, pcConfidence: Confidence)
+  private case class QualityCode(granularity: Granularity,
+                                 fsnConfidence: Confidence,
+                                 aaConfidence: Confidence,
+                                 pcConfidence: Confidence,
+                                 value: JString)
   private implicit val qcCodec = new JsonDecode[QualityCode] {
     val QC = "([PLIBAZ])([1-9])([ABCX])([ABCX])([ABCX])".r
     override def decode(x: JValue): DecodeResult[QualityCode] = x match {
-      case JString(QC(granularity, subgranularity, c1, c2, c3)) =>
+      case str@JString(QC(granularity, subgranularity, c1, c2, c3)) =>
         def parseConfidence(c: String) = c match {
           case "A" => Exact
           case "B" => Good
@@ -74,7 +79,7 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
           case "A" => GAdminArea
           case "Z" => GPostalCode
         }
-        Right(QualityCode(g(sg), parseConfidence(c1), parseConfidence(c2), parseConfidence(c3)))
+        Right(QualityCode(g(sg), parseConfidence(c1), parseConfidence(c2), parseConfidence(c3), str))
       case s: JString =>
         Left(DecodeError.InvalidValue(s))
       case other =>
@@ -87,17 +92,21 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
 
   private case class ResponseLocation(latLng: Option[LatLng], geocodeQualityCode: QualityCode) {
     def minAddressGranularity = GIntersection(1)
-    def minCityGranularity = GAdminArea(5)
-    def minStateGranularity = GAdminArea(3)
+    def minLocalityGranularity = GAdminArea(5)
+    def minSubregionGranularity = GAdminArea(4)
+    def minRegionGranularity = GAdminArea(3)
+    def minCountryGranularity = GAdminArea(1)
 
-    def isAcceptable(address: Address): Boolean = {
-      val Address(street, city, state, zip, country) = address
-      if(street.isDefined && (geocodeQualityCode.fsnConfidence == NoMeaningOrUnused || geocodeQualityCode.granularity < minAddressGranularity)) return false
-      if(city.isDefined && (geocodeQualityCode.aaConfidence == NoMeaningOrUnused || geocodeQualityCode.granularity < minCityGranularity)) return false
-      if(state.isDefined && (geocodeQualityCode.aaConfidence == NoMeaningOrUnused || geocodeQualityCode.granularity < minStateGranularity)) return false
+    def isAcceptable(addr: InternationalAddress): Boolean = {
+      val InternationalAddress(address, locality, subregion, region, postalCode, _) = addr
+      if(address.isDefined && (geocodeQualityCode.fsnConfidence == NoMeaningOrUnused || geocodeQualityCode.granularity < minAddressGranularity)) return false
+      if(locality.isDefined && (geocodeQualityCode.aaConfidence == NoMeaningOrUnused || geocodeQualityCode.granularity < minLocalityGranularity)) return false
+      if(subregion.isDefined && (geocodeQualityCode.aaConfidence == NoMeaningOrUnused || geocodeQualityCode.granularity < minSubregionGranularity)) return false
+      if(region.isDefined && (geocodeQualityCode.aaConfidence == NoMeaningOrUnused || geocodeQualityCode.granularity < minRegionGranularity)) return false
+      if(geocodeQualityCode.aaConfidence == NoMeaningOrUnused || geocodeQualityCode.granularity < minCountryGranularity) return false // country is always defined
       // zips are kind of special; we can (and indeed must) ignore them if we specified city or address
       // and the above checks passed.  In particular, this allows "Garden Grove, CA 92642" to pass.
-      if(zip.isDefined && geocodeQualityCode.pcConfidence == NoMeaningOrUnused && !(street.isDefined || city.isDefined)) return false
+      if(postalCode.isDefined && geocodeQualityCode.pcConfidence == NoMeaningOrUnused && !(address.isDefined || locality.isDefined)) return false
       true
     }
   }
@@ -138,7 +147,7 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
     else fail("ran out of retries", failure)
   }
 
-  private def geocodeBatch(metric: (GeocodingResult, Int) => Unit, addresses: Seq[Address]): Seq[Option[LatLon]] = {
+  private def geocodeBatch(metric: (GeocodingResult, Int) => Unit, addresses: Seq[InternationalAddress]): Seq[(Option[LatLon], JValue)] = {
     val converted = addresses.map(encodeForMQ)
     val requestBase = RequestBuilder("www.mapquestapi.com", secure = true).
       p("geocoding","v1","batch").
@@ -151,7 +160,7 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
         locations: $converted,
         options: { thumbMaps: false, maxResults: 1 }
       }"""
-    retrying[Seq[Option[LatLon]]] {
+    retrying[Seq[(Option[LatLon], JValue)]] {
       def requestBody = JValueEventIterator(body)
 
       val start = System.nanoTime()
@@ -170,13 +179,16 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
             JsonDecode.fromJValue[Response](logContentTypeFailure(resp.jValue())) match {
               case Right(geoResponse) =>
                 val result = (geoResponse.results, addresses).zipped.map { (rl, addr) =>
-                  val point = rl.locations.headOption.filter(_.isAcceptable(addr)).flatMap { loc =>
-                    loc.latLng match {
-                      case Some(latLng) => Some(LatLon(latLng.lat, latLng.lng)) // keep Mapquest's encoding internal
-                      case None         => None
-                    }
+                  val point = rl.locations.headOption match {
+                    case Some(res) =>
+                      (if (res.isAcceptable(addr)) res.latLng match {
+                        case Some(latLng) => Some(LatLon(latLng.lat, latLng.lng)) // keep Mapquest's encoding internal
+                        case None         => None
+                      }
+                      else None, res.geocodeQualityCode.value)
+                    case None => (None, JNull)
                   }
-                  if(point.isDefined) metric(SuccessResult, 1)
+                  if(point._1.isDefined) metric(SuccessResult, 1)
                   else metric(InsufficientlyPreciseResult, 1)
                   point
                 }
@@ -194,7 +206,7 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
               // "addresses" doesn't have an encoder, but to keep our logs clean we want to save it
               // as json (which will prevent random character stuff from being injected into the log
               // stream)
-              implicit val encoder = AutomaticJsonEncodeBuilder[Address]
+              implicit val encoder = AutomaticJsonEncodeBuilder[InternationalAddress]
               log.warn("500 from mapquest!  Going to retry, but just in case, here are the addresses we're trying to geocode: {}",
                 JsonUtil.renderJson(addresses, pretty = false))
             }

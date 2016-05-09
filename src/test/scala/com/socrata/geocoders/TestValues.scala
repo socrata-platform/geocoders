@@ -1,11 +1,13 @@
 package com.socrata.geocoders
 
+import com.rojoma.json.v3.ast.{JNull, JValue}
+
 object TestValues {
 
-  val addr0 = Address(Some("0000 N 1st street"), None, None, None, None)
-  val addr1 = Address(Some("1111 N 1st street"), None, None, None, None)
-  val addr2 = Address(Some("No such street..."), None, None, None, None)
-  val addr3 = Address(Some("3333 N 1st street"), None, None, None, None)
+  val addr0 = InternationalAddress(Some("0000 N 1st street"), None, None, None, None, "US")
+  val addr1 = InternationalAddress(Some("1111 N 1st street"), None, None, None, None, "US")
+  val addr2 = InternationalAddress(Some("No such street..."), None, None, None, None, "US")
+  val addr3 = InternationalAddress(Some("3333 N 1st street"), None, None, None, None, "US")
 
   val saddr0 = Some(addr0)
   val saddr1 = Some(addr1)
@@ -35,10 +37,18 @@ object TestValues {
   val addressesWithNones   = Seq(saddr0, None, saddr1, saddr2, None, saddr3, None)
   val coordinatesWithNones = Seq(  sll0, None,   sll1,   sll2, None,   sll3, None)
 
+  val mockBaseGeocoder = new BaseGeocoder {
+    override def batchSize: Int = 1
+
+    override def geocode(addresses: Seq[InternationalAddress]): Seq[(Option[LatLon], JValue)] = {
+      addresses.map { addr => (expected.get(addr), JNull) }
+    }
+  }
+
   val mockGeocoder = new Geocoder {
     override def batchSize: Int = 1
 
-    override def geocode(addresses: Seq[Address]): Seq[Option[LatLon]] = {
+    override def geocode(addresses: Seq[InternationalAddress]): Seq[Option[LatLon]] = {
       addresses.map { addr => expected.get(addr) }
     }
   }
@@ -46,7 +56,7 @@ object TestValues {
   val mockOptionalGeocoder = new OptionalGeocoder {
     override def batchSize: Int = 1
 
-    override def geocode(addresses: Seq[Option[Address]]): Seq[Option[LatLon]] = {
+    override def geocode(addresses: Seq[Option[InternationalAddress]]): Seq[Option[LatLon]] = {
       addresses.map {{
         case Some(addr) => expected.get(addr)
         case None => None

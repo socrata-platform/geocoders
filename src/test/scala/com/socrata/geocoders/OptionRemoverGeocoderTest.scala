@@ -6,7 +6,7 @@ class OptionRemoverGeocoderTest extends BaseTest {
   val instance = new OptionRemoverGeocoder(mockGeocoder)
 
   test("Should be able to geocode an empty sequence") {
-    instance.geocode(Seq[Option[Address]]()).length should be (0)
+    instance.geocode(Seq[Option[InternationalAddress]]()).length should be (0)
   }
 
   test("Should geocode Nones to Nones") {
