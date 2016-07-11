@@ -13,15 +13,10 @@ class CountryBatchingGeocoderAdapter(underlying: BaseGeocoder) extends BaseGeoco
    */
   override def geocode(addresses: Seq[InternationalAddress]): Seq[(Option[LatLon], JValue)] = {
     if (addresses.isEmpty) return Seq.empty
-    if (addresses.forall(_ == addresses.head)) return underlying.geocode(addresses) // don't do extra work
+    if (addresses.forall(_.country == addresses.head.country)) return underlying.geocode(addresses) // don't do extra work
 
     // collect into batches by country value
-    val batches = scala.collection.mutable.Map[String, ArrayBuffer[(InternationalAddress, Int)]]()
-    for ((address, index) <- addresses.zipWithIndex) {
-      val buf = batches.getOrElse(address.country, ArrayBuffer.empty)
-      buf += ((address, index))
-      batches += address.country -> buf
-    }
+    val batches = addresses.zipWithIndex.groupBy(_._1.country)
 
     // geocode them separately
     val batched = batches.mapValues { batch =>

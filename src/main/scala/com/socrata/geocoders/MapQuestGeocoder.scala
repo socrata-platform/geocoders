@@ -4,14 +4,15 @@ import java.io.IOException
 
 import com.rojoma.json.v3.codec.JsonDecode.DecodeResult
 import com.rojoma.json.v3.interpolation._
-import com.rojoma.json.v3.io.{JsonReaderException, JValueEventIterator}
+import com.rojoma.json.v3.io.JValueEventIterator
 import com.rojoma.json.v3.ast.{JNull, JValue, JString}
 import com.rojoma.json.v3.codec.{DecodeError, JsonDecode}
 import com.rojoma.json.v3.util.{AutomaticJsonEncodeBuilder, JsonUtil, AutomaticJsonDecodeBuilder}
-import com.socrata.http.client.exceptions.{ContentTypeException, HttpClientException}
+import com.socrata.http.client.exceptions.ContentTypeException
 import com.socrata.http.client.{RequestBuilder, HttpClient}
 
-class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (GeocodingResult, Long) => Unit, retryCount: Int = 5) extends BaseGeocoder {
+class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (GeocodingResult, Long) => Unit, val retryCount: Int = 5) extends BaseGeocoder with RetryWithLogging {
+  val provider = "MapQuest"
   val log = org.slf4j.LoggerFactory.getLogger(classOf[MapQuestGeocoder])
 
   override def batchSize = 100 // MapQuest (currently) supports batch geocoding of up to 100 locations
@@ -117,35 +118,6 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
 
   private case class Response(results: Seq[Result])
   private implicit val responseCodec = AutomaticJsonDecodeBuilder[Response]
-
-  def fail(message: String): Nothing = {
-    log.error(message)
-    throw new GeocodingFailure(message)
-  }
-
-  def fail(message: String, cause: Throwable): Nothing = {
-    log.error(message)
-    throw new GeocodingFailure(message, cause)
-  }
-
-  def credentialsException(message: String): Nothing = {
-    log.error(message)
-    throw new GeocodingCredentialsException(message)
-  }
-
-  def retrying[T](action: => T, remainingAttempts: Int = retryCount): T = {
-    val failure = try {
-      return action
-    } catch {
-      case e: IOException => e
-      case e: HttpClientException => e
-      case e: JsonReaderException => e
-    }
-
-    log.info("Unexpected exception while talking to mapquest; retrying request", failure)
-    if(remainingAttempts > 0) retrying(action, remainingAttempts - 1)
-    else fail("ran out of retries", failure)
-  }
 
   private def geocodeBatch(metric: (GeocodingResult, Int) => Unit, addresses: Seq[InternationalAddress]): Seq[(Option[LatLon], JValue)] = {
     val converted = addresses.map(encodeForMQ)

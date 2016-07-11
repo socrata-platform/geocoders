@@ -8,29 +8,45 @@ object TestValues {
   val addr1 = InternationalAddress(Some("1111 N 1st street"), None, None, None, None, "US")
   val addr2 = InternationalAddress(Some("No such street..."), None, None, None, None, "US")
   val addr3 = InternationalAddress(Some("3333 N 1st street"), None, None, None, None, "US")
+  val addr4 = InternationalAddress(Some("No such street..."), None, None, None, None, "CA")
+  val addr5 = InternationalAddress(Some("3333 N 1st street"), None, None, None, None, "CA")
+  val addr6 = InternationalAddress(Some("No such street..."), None, None, None, None, "UK")
+  val addr7 = InternationalAddress(Some("3333 N 1st street"), None, None, None, None, "UK")
 
   val saddr0 = Some(addr0)
   val saddr1 = Some(addr1)
   val saddr2 = Some(addr2)
   val saddr3 = Some(addr3)
+  val saddr4 = Some(addr4)
+  val saddr5 = Some(addr5)
+  val saddr6 = Some(addr6)
+  val saddr7 = Some(addr7)
 
   val ll0 = LatLon(0.0, 0.0)
   val ll1 = LatLon(1.0, 0.0)
   val ll3 = LatLon(3.0, 0.0)
+  val ll5 = LatLon(1.0, 1.0)
+  val ll7 = LatLon(1.0, 3.0)
 
   val sll0 = Some(ll0)
   val sll1 = Some(ll1)
   val sll2 = None
   val sll3 = Some(ll3)
+  val sll4 = None
+  val sll5 = Some(ll5)
+  val sll6 = None
+  val sll7 = Some(ll7)
 
   val expected = Map(
     addr0 -> ll0,
     addr1 -> ll1,
-    addr3 -> ll3
+    addr3 -> ll3,
+    addr5 -> ll5,
+    addr7 -> ll7
   )
 
-  val addresses   = Seq(addr0, addr1, addr2, addr3)
-  val coordinates = Seq( sll0,  sll1,  sll2,  sll3)
+  val addresses   = Seq(addr0, addr1, addr2, addr3, addr4, addr5, addr6, addr7)
+  val coordinates = Seq( sll0,  sll1,  sll2,  sll3, sll4,  sll5,  sll6,  sll7)
 
   val someAddresses = addresses.map(Some(_))
 
@@ -61,6 +77,16 @@ object TestValues {
         case Some(addr) => expected.get(addr)
         case None => None
       }}
+    }
+  }
+
+  val singleCountryMockBaseGeocoder = new BaseGeocoder {
+    override def batchSize: Int = 1
+
+    override def geocode(addresses: Seq[InternationalAddress]): Seq[(Option[LatLon], JValue)] = {
+      if(addresses.isEmpty) return Seq.empty
+      assert(addresses.forall(_.country == addresses.head.country))
+      mockBaseGeocoder.geocode(addresses)
     }
   }
 }

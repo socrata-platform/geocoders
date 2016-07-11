@@ -1,5 +1,7 @@
 package com.socrata.geocoders
 
+import java.io.IOException
+
 import com.rojoma.json.v3.ast._
 import com.rojoma.json.v3.io.{CompactJsonWriter, JsonReader}
 import com.rojoma.json.v3.matcher._
@@ -13,7 +15,8 @@ case class EsriRest(tokenHost: String,
                     password: String,
                     tokenExpiration: FiniteDuration)
 
-class EsriRestGeocoder(http: HttpClient, esriRest: EsriRest, metricProvider: (GeocodingResult, Long) => Unit) extends BaseGeocoder {
+class EsriRestGeocoder(http: HttpClient, esriRest: EsriRest, metricProvider: (GeocodingResult, Long) => Unit, val retryCount: Int = 5) extends BaseGeocoder with RetryWithLogging {
+  val provider = "ESRI"
   val log = org.slf4j.LoggerFactory.getLogger(classOf[EsriRestGeocoder])
   val serviceDescription = RequestBuilder(esriRest.host, secure = true).p("arcgis", "rest", "services", "World", "GeocodeServer").q("f" -> "json")
   val geocodingService = RequestBuilder(esriRest.host, secure = true).p("arcgis", "rest", "services", "World", "GeocodeServer", "geocodeAddresses")
@@ -47,49 +50,24 @@ class EsriRestGeocoder(http: HttpClient, esriRest: EsriRest, metricProvider: (Ge
   def doPost(req: RequestBuilder, body: Map[String, String]): JValue =
     doReq(req, _.form(body))
 
-  def fail(cause: String): Nothing = {
-    log.error(cause)
-    throw new GeocodingFailure(cause)
-  }
-
   def doReq(req: RequestBuilder, finish: RequestBuilder => SimpleHttpRequest): JValue = {
-    def loop(retriesRemaining: Int): JValue = {
-      if (retriesRemaining == 0) fail("Ran out of retries")
-
-      sealed abstract class Result
-      case object Retry extends Result
-      case class Fail(cause: String) extends Result
-      case class Success(v: JValue) extends Result
-
-      val res = try {
-        http.execute(finish(req.timeoutMS(requestTimeoutMS))).run { resp =>
-          resp.resultCode match {
-            case 200 =>
-              // ESRI likes to return things as text/plain
-              Success(JsonReader.fromReader(resp.reader()))
-            case 403 =>
-              log.info("403 from ESRI!")
-              Fail("Auth failure")
-            case 401 =>
-              log.info("401 from ESRI!  I'm going to retry just in case the token expired, but I'm not hopeful.")
-              Retry
-            case other =>
-              log.info("Unexpected result code {} from ESRI!  Retrying...", other)
-              Retry
-          }
+    retrying[JValue] {
+      http.execute(finish(req.timeoutMS(requestTimeoutMS))).run { resp =>
+        resp.resultCode match {
+          case 200 =>
+            // ESRI likes to return things as text/plain
+            JsonReader.fromReader(resp.reader())
+          case 403 =>
+            log.info("403 from ESRI!")
+            credentialsException("received 403 from ESRI!")
+          case 401 =>
+            log.info("401 from ESRI!  I'm going to retry just in case the token expired, but I'm not hopeful.")
+            throw new IOException(s"Received result code 401 from ESRI")
+          case other =>
+            throw new IOException(s"Unexpected result code $other from ESRI")
         }
-      } catch {
-        case e: Exception =>
-          log.info("Unexpected exception while talking to ESRI; retrying request", e)
-          Retry
-      }
-      res match {
-        case Success(v) => v
-        case Retry => loop(retriesRemaining - 1)
-        case Fail(cause) => fail(cause)
       }
     }
-    loop(5)
   }
 
   private def renewToken() {
@@ -102,7 +80,6 @@ class EsriRestGeocoder(http: HttpClient, esriRest: EsriRest, metricProvider: (Ge
       "expiration" -> (tokenExpirationInMinutes + expirationBufferMS).max(Int.MaxValue).toInt.toString,
       "f" -> "json"
     )
-
 
     val json = doPost(tokenService, body)
 
