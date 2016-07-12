@@ -9,11 +9,14 @@ import com.socrata.http.client.{SimpleHttpRequest, RequestBuilder, HttpClient}
 
 import scala.concurrent.duration.FiniteDuration
 
-case class EsriRest(tokenHost: String,
+case class EsriRest(referer: String,
+                    tokenHost: String,
                     host: String,
                     username: String,
                     password: String,
-                    tokenExpiration: FiniteDuration)
+                    tokenExpiration: FiniteDuration,
+                    expirationBufferMS: Long,
+                    requestTimeoutMS: Int)
 
 class EsriRestGeocoder(http: HttpClient, esriRest: EsriRest, metricProvider: (GeocodingResult, Long) => Unit, val retryCount: Int = 5) extends BaseGeocoder with RetryWithLogging {
   val provider = "ESRI"
@@ -21,13 +24,10 @@ class EsriRestGeocoder(http: HttpClient, esriRest: EsriRest, metricProvider: (Ge
   val serviceDescription = RequestBuilder(esriRest.host, secure = true).p("arcgis", "rest", "services", "World", "GeocodeServer").q("f" -> "json")
   val geocodingService = RequestBuilder(esriRest.host, secure = true).p("arcgis", "rest", "services", "World", "GeocodeServer", "geocodeAddresses")
   val tokenService = RequestBuilder(esriRest.tokenHost, secure = true).p("sharing", "generateToken")
-  val requestTimeoutMS = 30000
 
   val tokenExpirationInMinutes = esriRest.tokenExpiration.toMinutes
-  val referer = "http://socrata.com/"
   private var cachedToken: String = _
   private var cachedTokenExpires = Long.MinValue
-  private val expirationBufferMS = 60000L
 
   val outSR = "4326"
 
@@ -36,9 +36,9 @@ class EsriRestGeocoder(http: HttpClient, esriRest: EsriRest, metricProvider: (Ge
       case Right(n: JNumber) =>
         n.toInt
       case Right(_) =>
-        throw new Exception("Unable to determine geocoding batch size: not a number at locatorProperties.SuggestedBatchSize")
+        throw new GeocodingFailure("Unable to determine geocoding batch size: not a number at locatorProperties.SuggestedBatchSize")
       case Left(err) =>
-        throw new Exception("Unable to determine geocoding batch size: " + err.english)
+        throw new GeocodingFailure("Unable to determine geocoding batch size: " + err.english)
     }
 
   override def geocode(addresses: Seq[InternationalAddress]): Seq[(Option[LatLon], JValue)] =
@@ -52,7 +52,7 @@ class EsriRestGeocoder(http: HttpClient, esriRest: EsriRest, metricProvider: (Ge
 
   def doReq(req: RequestBuilder, finish: RequestBuilder => SimpleHttpRequest): JValue = {
     retrying[JValue] {
-      http.execute(finish(req.timeoutMS(requestTimeoutMS))).run { resp =>
+      http.execute(finish(req.timeoutMS(esriRest.requestTimeoutMS))).run { resp =>
         resp.resultCode match {
           case 200 =>
             // ESRI likes to return things as text/plain
@@ -62,7 +62,7 @@ class EsriRestGeocoder(http: HttpClient, esriRest: EsriRest, metricProvider: (Ge
             credentialsException("received 403 from ESRI!")
           case 401 =>
             log.info("401 from ESRI!  I'm going to retry just in case the token expired, but I'm not hopeful.")
-            throw new IOException(s"Received result code 401 from ESRI")
+            throw new IOException("Received result code 401 from ESRI")
           case other =>
             throw new IOException(s"Unexpected result code $other from ESRI")
         }
@@ -76,8 +76,8 @@ class EsriRestGeocoder(http: HttpClient, esriRest: EsriRest, metricProvider: (Ge
     val body = Map(
       "username" -> esriRest.username,
       "password" -> esriRest.password,
-      "referer" -> referer,
-      "expiration" -> (tokenExpirationInMinutes + expirationBufferMS).max(Int.MaxValue).toInt.toString,
+      "referer" -> esriRest.referer,
+      "expiration" -> (tokenExpirationInMinutes + esriRest.expirationBufferMS).max(Int.MaxValue).toInt.toString,
       "f" -> "json"
     )
 
@@ -92,7 +92,7 @@ class EsriRestGeocoder(http: HttpClient, esriRest: EsriRest, metricProvider: (Ge
 
     json match {
       case Pattern(res) =>
-        cachedTokenExpires = expiresVar(res) - expirationBufferMS
+        cachedTokenExpires = expiresVar(res) - esriRest.expirationBufferMS
         cachedToken = tokenVar(res)
       case other =>
         fail("Didn't get a valid response from token request: " + other)
