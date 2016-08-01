@@ -1,6 +1,8 @@
 package com.socrata.geocoders
 
 import java.io.IOException
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 import com.rojoma.json.v3.codec.JsonDecode.DecodeResult
 import com.rojoma.json.v3.interpolation._
@@ -19,18 +21,18 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
   override def geocode(addresses: Seq[InternationalAddress]): Seq[(Option[LatLon], JValue)] =
     addresses.grouped(batchSize).flatMap(geocodeBatch(metricProvider( _, _), _)).toVector
 
-  private def cleanAddress(address: String): String =
-    address.dropWhile(_ == '%') // work around mapquest bug
+  private def cleanForMapQuest(str: String): String =
+    URLEncoder.encode(str, StandardCharsets.UTF_8.name) // MapQuest url-decodes strings sent to their JSON API :(
 
   private def encodeForMQ(addr: InternationalAddress): Map[String, String] = {
     val InternationalAddress(address, locality, subregion, region, postalCode, country) = addr
     val mb = Map.newBuilder[String, String]
-    address.foreach { str => mb += "street" -> cleanAddress(str) }
-    locality.foreach(mb += "adminArea5" -> _)
-    subregion.foreach(mb += "adminArea4" -> _)
-    region.foreach(mb += "adminArea3" -> _)
-    postalCode.foreach(mb += "postalCode" -> _)
-    mb += "adminArea1" -> country
+    address.foreach { str => mb += "street" -> cleanForMapQuest(str) }
+    locality.foreach(mb += "adminArea5" -> cleanForMapQuest(_))
+    subregion.foreach(mb += "adminArea4" -> cleanForMapQuest(_))
+    region.foreach(mb += "adminArea3" -> cleanForMapQuest(_))
+    postalCode.foreach(mb += "postalCode" -> cleanForMapQuest(_))
+    mb += "adminArea1" -> cleanForMapQuest(country)
     mb.result()
   }
 
