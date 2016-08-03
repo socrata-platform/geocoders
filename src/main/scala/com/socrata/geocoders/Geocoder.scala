@@ -42,8 +42,18 @@ case class InternationalAddress(address: Option[String],
                                 country: String)
 
 object InternationalAddress {
-  // filter out empty strings to None and default country to US
+  @deprecated(message = "Confusing syntax; use create(.) instead.", since = "2.0.2")
   def apply(address: Option[String],
+            locality: Option[String],
+            subregion: Option[String],
+            region: Option[String],
+            postalCode: Option[String],
+            country: Option[String]): Option[InternationalAddress] = {
+    create(address, locality, subregion, region, postalCode, country)
+  }
+
+  // filter out empty strings to None and default country to US
+  def create(address: Option[String],
             locality: Option[String],
             subregion: Option[String],
             region: Option[String],
@@ -60,12 +70,13 @@ object InternationalAddress {
   }
 }
 
+@deprecated(message = "Unused; use InternationalAddress.create(.) instead.", since = "2.0.2")
 object USAddress {
   def apply(address: Option[String],
             city: Option[String],
             state: Option[String],
             zip: Option[String]): Option[InternationalAddress] = {
-    InternationalAddress(address, city, None, state, zip, None)
+    InternationalAddress.create(address, city, None, state, zip, None)
   }
 }
 
