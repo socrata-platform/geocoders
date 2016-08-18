@@ -1,6 +1,5 @@
 package com.socrata.geocoders
 
-import java.io.IOException
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
@@ -135,18 +134,33 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
     throw new GeocodingCredentialsException(message)
   }
 
+  sealed abstract class UnexpectedMapQuestResponse(val message: String, val addresses: Seq[InternationalAddress]) extends Exception(message)
+
+  case class UnexpectedMapQuestStatusCode(code: Int, override val addresses: Seq[InternationalAddress])
+    extends UnexpectedMapQuestResponse(s"Unexpected result code $code from MapQuest", addresses)
+
+  case class UnexpectedMapQuestResultLength(resultLength: Int, override val addresses: Seq[InternationalAddress])
+    extends UnexpectedMapQuestResponse(s"Unexpected result length from MapQuest; actual: $resultLength, expected: ${addresses.length}", addresses)
+
   def retrying[T](action: => T, remainingAttempts: Int = retryCount): T = {
     val failure = try {
       return action
     } catch {
-      case e: IOException => e
+      case e: UnexpectedMapQuestResponse =>
+        // "addresses" doesn't have an encoder, but to keep our logs clean we want to save it
+        // as json (which will prevent random character stuff from being injected into the log
+        // stream)
+        implicit val encoder = AutomaticJsonEncodeBuilder[InternationalAddress]
+        log.warn(s"${e.message}; going to retry, but just in case  here are the addresses we're trying to geocode: {}",
+          JsonUtil.renderJson(e.addresses, pretty = false))
+        e
       case e: HttpClientException => e
       case e: JsonReaderException => e
     }
 
-    log.info("Unexpected exception while talking to mapquest; retrying request", failure)
+    log.info("Unexpected exception while talking to MapQuest; retrying request", failure)
     if(remainingAttempts > 0) retrying(action, remainingAttempts - 1)
-    else fail("ran out of retries", failure)
+    else fail("Ran out of retries", failure)
   }
 
   private def geocodeBatch(metric: (GeocodingResult, Int) => Unit, addresses: Seq[InternationalAddress]): Seq[(Option[LatLon], JValue)] = {
@@ -169,7 +183,7 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
       http.execute(requestBase.json(requestBody)).run { resp =>
         resp.resultCode match {
           case 200 =>
-            def logContentTypeFailure(v: =>JValue): JValue =
+            def logContentTypeFailure(v: => JValue): JValue =
               try {
                 v
               } catch {
@@ -178,8 +192,17 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
                   throw e
               }
 
-            JsonDecode.fromJValue[Response](logContentTypeFailure(resp.jValue())) match {
+            val responseBody = logContentTypeFailure(resp.jValue())
+            JsonDecode.fromJValue[Response](responseBody) match {
               case Right(geoResponse) =>
+                val actual = geoResponse.results.length
+                val expected = addresses.length
+                if (actual != expected) {
+                  // MapQuest should give of the correct number of results...
+                  log.warn("MapQuest returned results of an unexpected length: {}",
+                    JsonUtil.renderJson(responseBody, pretty = false))
+                  throw UnexpectedMapQuestResultLength(actual, addresses)
+                }
                 val result = (geoResponse.results, addresses).zipped.map { (rl, addr) =>
                   val point = rl.locations.headOption match {
                     case Some(res) =>
@@ -199,21 +222,10 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
                 result
               case Left(e) =>
                 metric(UninterpretableResult, 1)
-                fail("Unable to interpret geocoding result from mapquest: " + e.english)
+                fail("Unable to interpret geocoding result from MapQuest: " + e.english)
             }
-          case 403 =>
-            credentialsException("403 from upstream!  Is our token broken?")
-          case other =>
-            if(other == 500) {
-              // "addresses" doesn't have an encoder, but to keep our logs clean we want to save it
-              // as json (which will prevent random character stuff from being injected into the log
-              // stream)
-              implicit val encoder = AutomaticJsonEncodeBuilder[InternationalAddress]
-              log.warn("500 from mapquest!  Going to retry, but just in case, here are the addresses we're trying to geocode: {}",
-                JsonUtil.renderJson(addresses, pretty = false))
-            }
-            // force a retry
-            throw new IOException(s"Unexpected result code $other from mapquest")
+          case 403 => credentialsException("403 from upstream!  Is our token broken?")
+          case other => throw UnexpectedMapQuestStatusCode(other, addresses) // force a retry
         }
       }
     }
