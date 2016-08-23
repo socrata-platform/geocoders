@@ -21,7 +21,7 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
     addresses.grouped(batchSize).flatMap(geocodeBatch(metricProvider( _, _), _)).toVector
 
   private def cleanForMapQuest(str: String): String =
-    URLEncoder.encode(str, StandardCharsets.UTF_8.name) // MapQuest url-decodes strings sent to their JSON API :(
+    str.replaceAll("%","%25")
 
   private def encodeForMQ(addr: InternationalAddress): Map[String, String] = {
     val InternationalAddress(address, locality, subregion, region, postalCode, country) = addr
