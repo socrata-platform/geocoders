@@ -11,6 +11,8 @@ val socrataThirdPartyUtils  = "com.socrata" %% "socrata-thirdparty-utils"   % "4
 
 val typesafeConfig          = "com.typesafe" % "config"                     % "1.0.2"
 
+val scalaCheck = "org.scalacheck" %% "scalacheck" % "1.12.1"
+
 lazy val commonSettings = Seq(
   organization := "com.socrata",
   scalaVersion := "2.10.4"
@@ -25,7 +27,8 @@ lazy val root = (project in file(".")).
       socrataHttpClient,
       astyanaxCassandra,
       typesafeConfig,
-      socrataThirdPartyUtils
+      socrataThirdPartyUtils,
+      scalaCheck % "test"
     ),
     com.socrata.sbtplugins.StylePlugin.StyleKeys.styleCheck in Test := {},
     com.socrata.sbtplugins.StylePlugin.StyleKeys.styleCheck in Compile := {},
