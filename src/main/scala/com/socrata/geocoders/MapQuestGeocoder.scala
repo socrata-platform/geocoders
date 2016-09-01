@@ -1,7 +1,6 @@
 package com.socrata.geocoders
 
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
+import java.io.IOException
 
 import com.rojoma.json.v3.codec.JsonDecode.DecodeResult
 import com.rojoma.json.v3.interpolation._
@@ -167,6 +166,7 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
         e
       case e: HttpClientException => e
       case e: JsonReaderException => e
+      case e: IOException => e // HttpClient throws IOExceptions
     }
 
     log.info("Unexpected exception while talking to MapQuest; retrying request", failure)
