@@ -6,7 +6,7 @@ val astyanaxCassandra = astyanaxExcludes("com.netflix.astyanax" % "astyanax-cass
 
 val rojomaJsonV3            = "com.rojoma"  %% "rojoma-json-v3"             % "[3.2.0,4.0.0)"
 
-val socrataHttpClient       = "com.socrata" %% "socrata-http-client"        % "3.3.2"
+val socrataHttpClient       = "com.socrata" %% "socrata-http-client"        % "3.11.0"
 val socrataThirdPartyUtils  = "com.socrata" %% "socrata-thirdparty-utils"   % "4.0.5"
 
 val typesafeConfig          = "com.typesafe" % "config"                     % "1.0.2"
@@ -15,7 +15,8 @@ val scalaCheck = "org.scalacheck" %% "scalacheck" % "1.12.1"
 
 lazy val commonSettings = Seq(
   organization := "com.socrata",
-  scalaVersion := "2.10.4"
+  scalaVersion := "2.10.4",
+  crossScalaVersions := Seq(scalaVersion.value, "2.11.7")
 )
 
 lazy val root = (project in file(".")).
