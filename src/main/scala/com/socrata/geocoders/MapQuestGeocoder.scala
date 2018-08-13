@@ -203,7 +203,7 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
                 v
               } catch {
                 case e: ContentTypeException =>
-                  log.warn("The response from MapQuest was not a valid JSON content type!  The body we sent was: {}", body)
+                  log.warn("The response from MapQuest was not a valid JSON content type!")
                   throw e
               }
 
