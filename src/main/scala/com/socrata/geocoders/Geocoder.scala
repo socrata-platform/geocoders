@@ -1,7 +1,6 @@
 package com.socrata.geocoders
 
 import com.rojoma.json.v3.ast.JValue
-import com.rojoma.json.v3.util.AutomaticJsonCodecBuilder
 
 
 trait BaseGeocoder {

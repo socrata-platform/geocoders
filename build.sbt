@@ -6,8 +6,8 @@ val astyanaxCassandra = astyanaxExcludes("com.netflix.astyanax" % "astyanax-cass
 
 val rojomaJsonV3            = "com.rojoma"  %% "rojoma-json-v3"             % "[3.2.0,4.0.0)"
 
-val socrataHttpClient       = "com.socrata" %% "socrata-http-client"        % "3.11.0"
-val socrataThirdPartyUtils  = "com.socrata" %% "socrata-thirdparty-utils"   % "4.0.5"
+val socrataHttpClient       = "com.socrata" %% "socrata-http-client"        % "3.11.4"
+val socrataThirdPartyUtils  = "com.socrata" %% "socrata-thirdparty-utils"   % "4.0.15"
 
 val typesafeConfig          = "com.typesafe" % "config"                     % "1.0.2"
 
