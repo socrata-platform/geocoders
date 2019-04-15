@@ -9,6 +9,10 @@ import scala.collection.mutable.ArrayBuffer
 class CachingGeocoderAdapter(cacheClient: CacheClient, underlying: BaseGeocoder, cachedCounter: Long => Unit, multiplier: Int = 1) extends Geocoder {
   val log = org.slf4j.LoggerFactory.getLogger(classOf[CachingGeocoderAdapter])
 
+  def logCached(cachedCount: Int) { // override me!
+    log.info("Avoided re-geocoding {} addresses via the cache", cachedCount)
+  }
+
   override def batchSize: Int = underlying.batchSize * multiplier
 
   override def geocode(addresses: Seq[InternationalAddress]): Seq[Option[LatLon]] = {
@@ -40,7 +44,7 @@ class CachingGeocoderAdapter(cacheClient: CacheClient, underlying: BaseGeocoder,
     assert(cached.length == orderedDeduped.length)
     val cachedCount = cached.count(_.isDefined)
     if(cachedCount != 0) {
-      log.info("Avoided re-geocoding {} addresses via the cache", cachedCount)
+      logCached(cachedCount)
       cachedCounter(cachedCount)
     }
 
