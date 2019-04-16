@@ -16,6 +16,10 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
 
   override def batchSize = 100 // MapQuest (currently) supports batch geocoding of up to 100 locations
 
+  def logProgress(count: Int, durationMS: Long) { // override me!
+    log.info("Geocoded {} addresses in {}ms", count, durationMS)
+  }
+
   override def geocode(addresses: Seq[InternationalAddress]): Seq[(Option[LatLon], JValue)] =
     addresses.grouped(batchSize).flatMap(geocodeBatch(metricProvider( _, _), _)).toVector
 
@@ -236,7 +240,7 @@ class MapQuestGeocoder(http: HttpClient, appKey: String, metricProvider: (Geocod
                   point
                 }
                 val end = System.nanoTime()
-                log.info("Geocoded {} addresses in {}ms", result.length, (end-start) / 1000000)
+                logProgress(result.length, (end - start) / 1000000)
                 result
               case Right(Response(Info(400, messages), _)) => failFor400(metric, addresses, messages)
               case Right(Response(Info(403, messages), _)) => failFor403(metric, messages)
