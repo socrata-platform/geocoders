@@ -1,22 +1,15 @@
 package com.socrata.geocoders.caching
 
-import com.netflix.astyanax.Keyspace
-import com.netflix.astyanax.model.ColumnFamily
-import com.netflix.astyanax.serializers.StringSerializer
+import com.datastax.driver.core.{TypeCodec, BatchStatement, PreparedStatement, Session}
 import com.rojoma.json.v3.io.{CompactJsonWriter, JsonReader}
 import com.rojoma.json.v3.matcher.{FirstOf, Variable, PArray}
 import com.rojoma.json.v3.ast.{JNull, JValue}
 import com.socrata.geocoders.{InternationalAddress, LatLon}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration.FiniteDuration
 
-class CassandraCacheClient(keyspace: Keyspace, columnFamilyName: String, cacheTime: FiniteDuration) extends CacheClient {
-  val cacheTTL: java.lang.Integer = cacheTime.toSeconds.toInt
-
-  val columnFamily = new ColumnFamily(columnFamilyName,
-    StringSerializer.get,
-    StringSerializer.get)
+class CassandraCacheClient(keyspace: Session, columnFamily: String, cacheTime: FiniteDuration, pqCache: (Session, String) => PreparedStatement = _.prepare(_)) extends CacheClient {
+  val cacheTTL = cacheTime.toSeconds.toInt
 
   val column = "coords"
 
@@ -27,34 +20,36 @@ class CassandraCacheClient(keyspace: Keyspace, columnFamilyName: String, cacheTi
     annotation
   )
 
+  val lookupQuery = pqCache(keyspace, "select coords from " + columnFamily + " where address = ?")
+
   override def lookup(addresses: Seq[InternationalAddress]): Seq[Option[Option[LatLon]]] = {
     // postcondition: result.length == addresses.length
-    val rows = addresses.map(toRowIdentifier)
-    val result = keyspace.prepareQuery(columnFamily).
-      getRowSlice(rows.asJava).
-      withColumnSlice(column).
-      execute()
-    (addresses, rows).zipped.map { (addr, row) =>
-      Option(result.getResult.getRow(row)).flatMap { row =>
-        Option(row.getColumns.getStringValue(column, null)).flatMap { col =>
-          JsonReader.fromString(col) match {
+    addresses
+      .map { address => keyspace.executeAsync(lookupQuery.bind(toRowIdentifier(address))) }
+      .map { rsFuture =>
+        val it = rsFuture.get().iterator
+        if(it.hasNext) Some(it.next().get(0, TypeCodec.varchar))
+        else None
+      }.map { (result: Option[String]) =>
+        result.map { jsonText =>
+          JsonReader.fromString(jsonText) match {
             case Pattern(res) =>
-              Some(latLon.get(res))
+              latLon.get(res)
             case _ =>
               None
           }
         }
       }
-    }
   }
 
+  val cacheStmt = pqCache(keyspace, "insert into " + columnFamily + " (address, coords) values (?, ?) using ttl " + cacheTTL)
   override def cache(addresses: Seq[(InternationalAddress, (Option[LatLon], JValue))]): Unit = {
     if(addresses.nonEmpty) {
-      val mutation = keyspace.prepareMutationBatch
+      val mutation = new BatchStatement
       for((address, (point, ann)) <- addresses) {
-        mutation.withRow(columnFamily, toRowIdentifier(address)).putColumn(column, CompactJsonWriter.toString(Pattern.generate(latLon :=? point, annotation := ann)), cacheTTL)
+        mutation.add(cacheStmt.bind(toRowIdentifier(address), CompactJsonWriter.toString(Pattern.generate(latLon :=? point, annotation := ann))))
       }
-      mutation.execute()
+      keyspace.execute(mutation)
     }
   }
 }
