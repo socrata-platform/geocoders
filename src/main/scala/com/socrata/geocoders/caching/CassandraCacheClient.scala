@@ -14,7 +14,7 @@ class CassandraCacheClient(keyspace: Session,
                            columnFamily: String,
                            cacheTime: FiniteDuration,
                            pqCache: (Session, String) => PreparedStatement = _.prepare(_),
-                           lookupConcurrencyLimit: Int = 1000) extends CacheClient {
+                           concurrencyLimit: Int = 1000) extends CacheClient {
   val cacheTTL = cacheTime.toSeconds.toInt
 
   val column = "coords"
@@ -30,7 +30,7 @@ class CassandraCacheClient(keyspace: Session,
 
   val lookupQuery = pqCache(keyspace, "select coords from " + columnFamily + " where address = ?")
 
-  private val tickets = new Semaphore(lookupConcurrencyLimit)
+  private val tickets = new Semaphore(concurrencyLimit)
   private val freeTicket = new Runnable {
     def run() {
       tickets.release()
@@ -72,12 +72,18 @@ class CassandraCacheClient(keyspace: Session,
 
   val cacheStmt = pqCache(keyspace, "insert into " + columnFamily + " (address, coords) values (?, ?) using ttl " + cacheTTL)
   override def cache(addresses: Seq[(InternationalAddress, (Option[LatLon], JValue))]): Unit = {
-    if(addresses.nonEmpty) {
-      val mutation = new BatchStatement
-      for((address, (point, ann)) <- addresses) {
-        mutation.add(cacheStmt.bind(toRowIdentifier(address), CompactJsonWriter.toString(Pattern.generate(latLon :=? point, annotation := ann))))
+    addresses.map { case (address, (point, ann)) =>
+      val boundQuery = cacheStmt.bind(toRowIdentifier(address), CompactJsonWriter.toString(Pattern.generate(latLon :=? point, annotation := ann)))
+      tickets.acquire()
+      try {
+        val insFuture = keyspace.executeAsync(boundQuery)
+        insFuture.addListener(freeTicket, MoreExecutors.directExecutor)
+        insFuture
+      } catch {
+        case t: Throwable =>
+          tickets.release()
+          throw t
       }
-      keyspace.execute(mutation)
-    }
+    }.foreach(_.get)
   }
 }
