@@ -6,7 +6,7 @@ scalaVersion := "2.12.8"
 
 crossScalaVersions := Seq("2.10.4", "2.11.7", scalaVersion.value)
 
-mimaPreviousArtifacts := Set("com.socrata" %% "geocoders" % "2.2.1")
+mimaPreviousArtifacts := Set("com.socrata" %% "geocoders" % "2.3.0")
 
 name := "geocoders"
 
