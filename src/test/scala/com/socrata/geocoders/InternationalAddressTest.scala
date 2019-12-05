@@ -1,11 +1,11 @@
 package com.socrata.geocoders
 
 import com.rojoma.json.v3.util.JsonUtil
-import org.scalatest.prop.PropertyChecks
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import org.scalacheck.Arbitrary
 import Arbitrary.arbitrary
 
-class InternationalAddressTest extends BaseTest with PropertyChecks {
+class InternationalAddressTest extends BaseTest with ScalaCheckPropertyChecks {
   val genAddress = for {
     address <- arbitrary[Option[String]]
     locality <- arbitrary[Option[String]]

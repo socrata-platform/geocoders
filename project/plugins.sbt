@@ -1,8 +1,5 @@
 resolvers ++= Seq(
-  Resolver.url("socrata maven", url("https://repo.socrata.com/artifactory/ivy-libs-release"))(Resolver.ivyStylePatterns),
-  "Typesafe Repository" at "https://repo.typesafe.com/typesafe/releases/"
+  Resolver.url("socrata ivy", url("https://repo.socrata.com/artifactory/ivy-libs-release"))(Resolver.ivyStylePatterns)
 )
 
-addSbtPlugin("com.socrata" % "socrata-sbt-plugins" %"1.6.8")
-
-addSbtPlugin("io.spray" % "sbt-revolver" % "0.7.2")
+addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.6.1")
