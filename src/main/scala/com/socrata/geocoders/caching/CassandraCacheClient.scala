@@ -8,6 +8,7 @@ import com.rojoma.json.v3.matcher.{FirstOf, Variable, PArray}
 import com.rojoma.json.v3.ast.{JNull, JValue}
 import com.socrata.geocoders.{InternationalAddress, LatLon}
 import java.util.concurrent.{Semaphore, CompletionStage}
+import java.util.function.BiConsumer
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -32,6 +33,12 @@ class CassandraCacheClient(keyspace: CqlSession,
 
   private val tickets = new Semaphore(concurrencyLimit)
 
+  private val freeTicket = new BiConsumer[Any, Any] {
+    def accept(a: Any, b: Any) {
+      tickets.release()
+    }
+  }
+
   override def lookup(addresses: Seq[InternationalAddress]): Seq[Option[Option[LatLon]]] = {
     // postcondition: result.length == addresses.length
     addresses.map { address =>
@@ -40,9 +47,7 @@ class CassandraCacheClient(keyspace: CqlSession,
       try {
         keyspace.
           executeAsync(boundQuery).
-          whenComplete { (_, _) =>
-            tickets.release()
-          }
+          whenComplete(freeTicket)
       } catch {
         case t: Throwable =>
           // either the executaAsync or the whenComplete threw, so
@@ -75,9 +80,7 @@ class CassandraCacheClient(keyspace: CqlSession,
       try {
         keyspace.
           executeAsync(boundQuery).
-          whenComplete { (_, _) =>
-            tickets.release()
-          }
+          whenComplete(freeTicket)
       } catch {
         case t: Throwable =>
           tickets.release()
