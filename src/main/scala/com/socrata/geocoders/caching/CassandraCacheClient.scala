@@ -10,13 +10,20 @@ import java.util.concurrent.Semaphore
 
 import scala.concurrent.duration.FiniteDuration
 
+object CassandraCacheClient {
+  val columnFamily = "geocode_cache"
+}
+
 class CassandraCacheClient(keyspace: Session,
-                           columnFamily: String,
+                           // columnFamily is ignored now; unfortunately the inability to overload
+                           // methods with default arguments makes deprecating it difficult...
+                           private[this] var columnFamily: String,
                            cacheTime: FiniteDuration,
                            pqCache: (Session, String) => PreparedStatement = _.prepare(_),
                            concurrencyLimit: Int = 1000) extends CacheClient {
-  val cacheTTL = cacheTime.toSeconds.toInt
 
+  columnFamily = CassandraCacheClient.columnFamily
+  val cacheTTL = cacheTime.toSeconds.toInt
   val column = "coords"
 
   val latLon = Variable[LatLon]()
