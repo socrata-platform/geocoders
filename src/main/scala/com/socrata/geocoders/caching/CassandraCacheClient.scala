@@ -12,12 +12,19 @@ import java.util.function.BiConsumer
 
 import scala.concurrent.duration.FiniteDuration
 
+object CassandraCacheClient {
+  val columnFamily = "geocode_cache"
+}
+
 class CassandraCacheClient(keyspace: CqlSession,
-                           columnFamily: String,
+                           // columnFamily is ignored now; unfortunately the inability to overload
+                           // methods with default arguments makes deprecating it difficult...
+                           private[this] var columnFamily: String,
                            cacheTime: FiniteDuration,
                            concurrencyLimit: Int = 1000) extends CacheClient {
-  val cacheTTL = cacheTime.toSeconds.toInt
 
+  columnFamily = CassandraCacheClient.columnFamily
+  val cacheTTL = cacheTime.toSeconds.toInt
   val column = "coords"
 
   val latLon = Variable[LatLon]()
