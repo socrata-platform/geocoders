@@ -90,6 +90,7 @@ class PostgresqlCacheClient(dataSource: DataSource,
                                values (?, ?, ?, (now() + '$cacheTTL seconds' :: interval))
                                on conflict (address) do update set
                                   coords = EXCLUDED.coords,
+                                  annotation = EXCLUDED.annotation,
                                   remove_at = EXCLUDED.remove_at"""
   override def cache(addresses: Seq[(InternationalAddress, (Option[LatLon], JValue))]): Unit = {
     if(addresses.isEmpty) return
