@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-2.0.xsd">
+
+    <changeSet author="robertm" id="1">
+      <createTable tableName="geocode_cache">
+        <column name="address" type="text">
+          <constraints primaryKey="true" nullable="false"/>
+        </column>
+        <column name="coords" type="text">
+          <constraints nullable="false"/>
+        </column>
+        <column name="annotation" type="text">
+          <constraints nullable="true"/>
+        </column>
+        <column name="remove_at" type="timestamp with time zone">
+          <constraints nullable="false"/>
+        </column>
+      </createTable>
+
+      <createIndex indexName="geocode_cache_remove_at" tableName="geocode_cache">
+        <column name="remove_at"/>
+      </createIndex>
+    </changeSet>
+
+</databaseChangeLog>
