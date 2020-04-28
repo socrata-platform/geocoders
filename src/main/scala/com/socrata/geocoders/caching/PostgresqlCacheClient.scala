@@ -86,10 +86,11 @@ class PostgresqlCacheClient(dataSource: DataSource,
     result
   }
 
-  private val cacheStmt = """insert into geocode_cache (address, coords, annotation, remove_at)
+  private val cacheStmt = s"""insert into geocode_cache (address, coords, annotation, remove_at)
                                values (?, ?, ?, (now() + '$cacheTTL seconds' :: interval))
                                on conflict (address) do update set
                                   coords = EXCLUDED.coords,
+                                  annotation = EXCLUDED.annotation,
                                   remove_at = EXCLUDED.remove_at"""
   override def cache(addresses: Seq[(InternationalAddress, (Option[LatLon], JValue))]): Unit = {
     if(addresses.isEmpty) return
