@@ -5,5 +5,6 @@
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-2.0.xsd">
 
   <include relativeToChangelogFile="true" file="20200421-bootstrap.xml" />
+  <include relativeToChangelogFile="true" file="20200428-fix-nullability.xml" />
 
 </databaseChangeLog>
