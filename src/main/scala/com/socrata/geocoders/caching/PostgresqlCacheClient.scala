@@ -2,7 +2,7 @@ package com.socrata.geocoders.caching
 
 import scala.concurrent.duration._
 
-import java.sql.Connection
+import java.sql.{Connection, SQLException}
 import javax.sql.DataSource
 import java.util.concurrent.atomic.AtomicLong
 
@@ -32,15 +32,25 @@ class PostgresqlCacheClient(dataSource: DataSource,
       r
     }
 
+  private def isDeadlock(e: SQLException): Boolean = {
+    e.getSQLState == "40P01"
+  }
+
   private val cleanStatement = "delete from geocode_cache where remove_at < now()"
   private def maybeClean(conn: Connection) = {
     val now = System.currentTimeMillis()
     if(now > nextClean.get) {
       synchronized {
         if(now > nextClean.get) {
-          using(conn.prepareStatement(cleanStatement))(_.executeUpdate())
-          conn.commit()
-          nextClean.set(System.currentTimeMillis() + cleanInterval)
+          try {
+            using(conn.prepareStatement(cleanStatement))(_.executeUpdate())
+            conn.commit()
+            nextClean.set(System.currentTimeMillis() + cleanInterval)
+          } catch {
+            case e: SQLException if isDeadlock(e) =>
+              // meh whatever, it'll get cleaned up eventually
+              conn.rollback()
+          }
         }
       }
     }
@@ -96,15 +106,26 @@ class PostgresqlCacheClient(dataSource: DataSource,
     if(addresses.isEmpty) return
 
     withConnection() { conn =>
-      using(conn.prepareStatement(cacheStmt)) { stmt =>
-        for((address, (point, ann)) <- addresses) {
-          stmt.setString(1, toRowIdentifier(address))
-          stmt.setString(2, point.map(JsonUtil.renderJson(_, pretty = false)).orNull)
-          stmt.setString(3, JsonUtil.renderJson(ann, pretty = false))
-          stmt.addBatch()
+      def attemptWrite(): Boolean = {
+        try {
+          using(conn.prepareStatement(cacheStmt)) { stmt =>
+            for((address, (point, ann)) <- addresses) {
+              stmt.setString(1, toRowIdentifier(address))
+              stmt.setString(2, point.map(JsonUtil.renderJson(_, pretty = false)).orNull)
+              stmt.setString(3, JsonUtil.renderJson(ann, pretty = false))
+              stmt.addBatch()
+            }
+            stmt.executeBatch()
+          }
+          true
+        } catch {
+          case e: SQLException if isDeadlock(e) =>
+            // we drew the short straw, just try again.
+            conn.rollback()
+            false
         }
-        stmt.executeBatch()
       }
+      while(!attemptWrite()) {}
     }
   }
 }
