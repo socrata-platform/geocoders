@@ -6,7 +6,7 @@ import com.socrata.geocoders.caching.CacheClient
 import scala.collection.mutable.ArrayBuffer
 
 
-class CachingGeocoderAdapter(cacheClient: CacheClient, underlying: BaseGeocoder, cachedCounter: Long => Unit, multiplier: Int = 1) extends Geocoder {
+class CachingGeocoderAdapter(cacheClient: CacheClient, underlying: BaseGeocoder with Sourcable, cachedCounter: Long => Unit, multiplier: Int = 1) extends Geocoder {
   val log = org.slf4j.LoggerFactory.getLogger(classOf[CachingGeocoderAdapter])
 
   def logCached(cachedCount: Int) { // override me!
@@ -40,7 +40,7 @@ class CachingGeocoderAdapter(cacheClient: CacheClient, underlying: BaseGeocoder,
     // We may already have some of the addresses cached.
     // "cached" will be the same length as "orderedDeduped" with
     // Some(Option[LatLon]) where something was cached and None where it was not.
-    val cached = cacheClient.lookup(orderedDeduped)
+    val cached = cacheClient.lookup(underlying.source, orderedDeduped)
     assert(cached.length == orderedDeduped.length)
     val cachedCount = cached.count(_.isDefined)
     if(cachedCount != 0) {
@@ -56,7 +56,7 @@ class CachingGeocoderAdapter(cacheClient: CacheClient, underlying: BaseGeocoder,
       assert(fresh.length == uncached.length) // there must be one result for each hole in "cached"
 
       // Ok, stick the results of geocoding in the cache.
-      cacheClient.cache(uncached.zip(fresh))
+      cacheClient.cache(underlying.source, uncached.zip(fresh))
 
       // we'll be simultaneously scanning across "cached", "fresh",
       // and "dedupedResult" at different rates.

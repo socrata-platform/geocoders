@@ -1,10 +1,12 @@
 package com.socrata.geocoders
 
 import com.rojoma.json.v3.ast.JNull
-import com.socrata.geocoders.caching.MapCacheClient
+import com.socrata.geocoders.caching.{MapCacheClient, Source}
 
 class CachingGeocoderAdapterTest extends BaseTest {
   import TestValues._
+
+  val source = Source("test")
 
   def withMocks[A](f: (MapCacheClient, MockMetric, Geocoder) => A) = {
     val metric = new MockMetric
@@ -21,7 +23,7 @@ class CachingGeocoderAdapterTest extends BaseTest {
 
     withMocks { (cache, metric, instance) =>
       val toCache = addresses.zip(coordinates.map { coord => (coord, JNull) })
-      cache.cache(toCache)
+      cache.cache(source, toCache)
       instance.geocode(Seq[InternationalAddress]()).size should be (0)
       metric.count should be (0)
       cache.cached should be (toCache.length)
@@ -39,7 +41,7 @@ class CachingGeocoderAdapterTest extends BaseTest {
   test("Should cache all geocoding results when the cache does not contain any of the values") {
     withMocks { (cache, metric, instance) =>
       val toCache = Seq((InternationalAddress(Some("not_in_sequence"), None, None, None, None, "US"), (None, JNull)))
-      cache.cache(toCache)
+      cache.cache(source, toCache)
       instance.geocode(addresses) should be(coordinates)
       metric.count should be(0)
       cache.cached should be(addresses.length + 1)
@@ -49,7 +51,7 @@ class CachingGeocoderAdapterTest extends BaseTest {
   test("Should use values found in the cache instead of regeocoding") {
     withMocks { (cache, metric, instance) =>
       val toCache = Seq((addr1, (sll1, JNull)), (addr2, (sll2, JNull)))
-      cache.cache(toCache)
+      cache.cache(source, toCache)
       instance.geocode(addresses) should be(coordinates)
       metric.count should be(2)
       cache.cached should be(addresses.length)
@@ -61,7 +63,7 @@ class CachingGeocoderAdapterTest extends BaseTest {
         case None => Some(LatLon(0.0, 0.0))
       }
       val toCache = addresses.zip(modifiedCoordinates.map { coord => (coord, JNull) })
-      cache.cache(toCache)
+      cache.cache(source, toCache)
       instance.geocode(addresses) should be(modifiedCoordinates) // cache values are different then base geocoding
       metric.count should be(modifiedCoordinates.length)
       cache.cached should be(modifiedCoordinates.length)
@@ -76,14 +78,14 @@ class CachingGeocoderAdapterTest extends BaseTest {
     }
 
     withMocks { (cache, metric, instance) =>
-      cache.cache(Seq((addr3, (sll3, JNull))))
+      cache.cache(source, Seq((addr3, (sll3, JNull))))
       instance.geocode(addresses ++ Seq(addr3, addr3)) should be(coordinates ++ Seq(sll3, sll3))
       metric.count should be(3) // addr3 in cache and both duplicate values
       cache.cached should be(addresses.length)
     }
 
     withMocks { (cache, metric, instance) =>
-      cache.cache(Seq((addr2, (sll2, JNull))))
+      cache.cache(source, Seq((addr2, (sll2, JNull))))
       instance.geocode(addresses ++ Seq(addr3, addr0)) should be(coordinates ++ Seq(sll3, sll0))
       metric.count should be(3) // addr2 in the cache, duplicates of addr0, addr3
       cache.cached should be(addresses.length)

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-2.0.xsd">
+
+    <changeSet author="robertm" id="1">
+      <sql>
+        <!-- default mq because, as of the time when it's added, all geocoding comes from mq. -->
+        alter table geocode_cache add column source text not null default 'mq', drop constraint pk_geocode_cache;
+        create unique index pk_geocode_cache on geocode_cache (source,address);
+        alter table geocode_cache add constraint pk_geocode_cache primary key using index pk_geocode_cache;
+      </sql>
+      <rollback>
+        <sql>
+          alter table geocode_cache drop constraint pk_geocode_cache;
+          create unique index pk_geocode_cache on geocode_cache (address);
+          alter table geocode_cache drop column source, add constraint pk_geocode_cache primary key using index pk_geocode_cache;
+        </sql>
+      </rollback>
+    </changeSet>
+
+</databaseChangeLog>

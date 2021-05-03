@@ -13,7 +13,7 @@ trait CacheClient {
   /**
    * @param addresses Sequence of InternationalAddresses to put in the cache
    */
-  def cache(addresses: Seq[(InternationalAddress, (Option[LatLon], JValue))]): Unit
+  def cache(source: Source, addresses: Seq[(InternationalAddress, (Option[LatLon], JValue))]): Unit
 
   /**
    * @param addresses Sequence of InternationalAddresses to lookup from the cache
@@ -23,5 +23,5 @@ trait CacheClient {
    *         - Some(None) if the address was found in the cache without a value
    *         - None if the address was not found in the cache
    */
-  def lookup(addresses: Seq[InternationalAddress]): Seq[Option[Option[LatLon]]]
+  def lookup(source: Source, addresses: Seq[InternationalAddress]): Seq[Option[Option[LatLon]]]
 }

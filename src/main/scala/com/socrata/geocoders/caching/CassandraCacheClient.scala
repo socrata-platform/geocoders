@@ -36,7 +36,7 @@ class CassandraCacheClient(keyspace: CqlSession,
 
   val log = org.slf4j.LoggerFactory.getLogger(classOf[CassandraCacheClient])
 
-  val lookupQuery = keyspace.prepare("select coords from " + columnFamily + " where address = ?")
+  val lookupQuery = keyspace.prepare("select coords from " + columnFamily + " where address = ? and source = ?")
 
   private val tickets = new Semaphore(concurrencyLimit)
 
@@ -46,10 +46,10 @@ class CassandraCacheClient(keyspace: CqlSession,
     }
   }
 
-  override def lookup(addresses: Seq[InternationalAddress]): Seq[Option[Option[LatLon]]] = {
+  override def lookup(source: Source, addresses: Seq[InternationalAddress]): Seq[Option[Option[LatLon]]] = {
     // postcondition: result.length == addresses.length
     addresses.map { address =>
-      val boundQuery = lookupQuery.bind(toRowIdentifier(address))
+      val boundQuery = lookupQuery.bind(toRowIdentifier(address), source.tag)
       tickets.acquire()
       try {
         keyspace.
@@ -79,10 +79,10 @@ class CassandraCacheClient(keyspace: CqlSession,
     }
   }
 
-  val cacheStmt = keyspace.prepare("insert into " + columnFamily + " (address, coords) values (?, ?) using ttl " + cacheTTL)
-  override def cache(addresses: Seq[(InternationalAddress, (Option[LatLon], JValue))]): Unit = {
+  val cacheStmt = keyspace.prepare("insert into " + columnFamily + " (source, address, coords) values (?, ?, ?) using ttl " + cacheTTL)
+  override def cache(source: Source, addresses: Seq[(InternationalAddress, (Option[LatLon], JValue))]): Unit = {
     addresses.map { case (address, (point, ann)) =>
-      val boundQuery = cacheStmt.bind(toRowIdentifier(address), CompactJsonWriter.toString(Pattern.generate(latLon :=? point, annotation := ann)))
+      val boundQuery = cacheStmt.bind(source.tag, toRowIdentifier(address), CompactJsonWriter.toString(Pattern.generate(latLon :=? point, annotation := ann)))
       tickets.acquire()
       try {
         keyspace.

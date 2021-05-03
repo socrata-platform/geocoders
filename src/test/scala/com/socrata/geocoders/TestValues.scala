@@ -37,12 +37,14 @@ object TestValues {
   val addressesWithNones   = Seq(saddr0, None, saddr1, saddr2, None, saddr3, None)
   val coordinatesWithNones = Seq(  sll0, None,   sll1,   sll2, None,   sll3, None)
 
-  val mockBaseGeocoder = new BaseGeocoder {
+  val mockBaseGeocoder = new BaseGeocoder with Sourcable {
     override def batchSize: Int = 1
 
     override def geocode(addresses: Seq[InternationalAddress]): Seq[(Option[LatLon], JValue)] = {
       addresses.map { addr => (expected.get(addr), JNull) }
     }
+
+    val source = caching.Source("mock")
   }
 
   val mockGeocoder = new Geocoder {

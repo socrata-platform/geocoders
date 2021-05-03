@@ -57,9 +57,9 @@ class PostgresqlCacheClient(dataSource: DataSource,
   }
 
   private def lookupQuery(n: Int) =
-    Iterator.continually("?").take(n).mkString("select address, coords from geocode_cache where address in (", ",", ") and remove_at >= now()")
+    Iterator.continually("?").take(n).mkString("select address, coords from geocode_cache where source = ? and address in (", ",", ") and remove_at >= now()")
 
-  override def lookup(addresses: Seq[InternationalAddress]): Seq[Option[Option[LatLon]]] = {
+  override def lookup(source: Source, addresses: Seq[InternationalAddress]): Seq[Option[Option[LatLon]]] = {
     if(addresses.isEmpty) return Nil
 
     val outputIndices = addresses.iterator.zipWithIndex.foldLeft(Map.empty[String, List[Int]]) { (acc, addrIdx) =>
@@ -71,8 +71,9 @@ class PostgresqlCacheClient(dataSource: DataSource,
 
     withConnection() { conn =>
       using(conn.prepareStatement(lookupQuery(outputIndices.size))) { stmt =>
+        stmt.setString(1, source.tag)
         outputIndices.keys.iterator.zipWithIndex.foreach { case (key, i) =>
-          stmt.setString(i+1, key)
+          stmt.setString(i+2, key)
         }
         using(stmt.executeQuery()) { rs =>
           while(rs.next()) {
@@ -96,13 +97,13 @@ class PostgresqlCacheClient(dataSource: DataSource,
     result
   }
 
-  private val cacheStmt = s"""insert into geocode_cache (address, coords, annotation, remove_at)
-                               values (?, ?, ?, (now() + '$cacheTTL seconds' :: interval))
-                               on conflict (address) do update set
+  private val cacheStmt = s"""insert into geocode_cache (source, address, coords, annotation, remove_at)
+                               values (?, ?, ?, ?, (now() + '$cacheTTL seconds' :: interval))
+                               on conflict (source, address) do update set
                                   coords = EXCLUDED.coords,
                                   annotation = EXCLUDED.annotation,
                                   remove_at = EXCLUDED.remove_at"""
-  override def cache(addresses: Seq[(InternationalAddress, (Option[LatLon], JValue))]): Unit = {
+  override def cache(source: Source, addresses: Seq[(InternationalAddress, (Option[LatLon], JValue))]): Unit = {
     if(addresses.isEmpty) return
 
     withConnection() { conn =>
@@ -110,9 +111,10 @@ class PostgresqlCacheClient(dataSource: DataSource,
         try {
           using(conn.prepareStatement(cacheStmt)) { stmt =>
             for((address, (point, ann)) <- addresses) {
-              stmt.setString(1, toRowIdentifier(address))
-              stmt.setString(2, point.map(JsonUtil.renderJson(_, pretty = false)).orNull)
-              stmt.setString(3, JsonUtil.renderJson(ann, pretty = false))
+              stmt.setString(1, source.tag)
+              stmt.setString(2, toRowIdentifier(address))
+              stmt.setString(3, point.map(JsonUtil.renderJson(_, pretty = false)).orNull)
+              stmt.setString(4, JsonUtil.renderJson(ann, pretty = false))
               stmt.addBatch()
             }
             stmt.executeBatch()

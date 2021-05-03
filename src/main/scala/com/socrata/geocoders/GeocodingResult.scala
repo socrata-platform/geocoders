@@ -2,6 +2,7 @@ package com.socrata.geocoders
 
 sealed abstract class GeocodingResult
 case object SuccessResult extends GeocodingResult
+case object NoResult extends GeocodingResult
 case object InsufficientlyPreciseResult extends GeocodingResult
 case object UninterpretableResult extends GeocodingResult
 case object BadInputResult extends GeocodingResult

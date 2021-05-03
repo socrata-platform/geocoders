@@ -13,6 +13,10 @@ trait BaseGeocoder {
   def geocode(addresses: Seq[InternationalAddress]): Seq[(Option[LatLon], JValue)]
 }
 
+trait Sourcable {
+  val source: caching.Source
+}
+
 trait Geocoder {
   def batchSize: Int
 
