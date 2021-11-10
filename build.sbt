@@ -15,7 +15,7 @@ libraryDependencies ++= Seq(
   // using slf4j properly.  That would break pretty much all users of _this_
   // library because we're pretty standardized on log4j.  See
   // https://liquibase.jira.com/browse/CORE-3212
-  "org.liquibase" % "liquibase-core" % "3.5.5",
+  "org.liquibase" % "liquibase-core" % "3.10.3",
   "com.rojoma" %% "rojoma-json-v3" % "[3.2.0,4.0.0)",
   "com.rojoma" %% "simple-arm-v2" % "2.3.2",
   "com.socrata" %% "socrata-http-client" % "3.12.0",
