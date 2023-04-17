@@ -16,6 +16,7 @@ class EsriGeocoder(
   host: String,
   username: String,
   password: String,
+  referer: String,
   tokenExpiration: FiniteDuration,
   batchSizeExpiration: FiniteDuration,
   metricProvider: (GeocodingResult, Long) => Unit,
@@ -29,7 +30,6 @@ class EsriGeocoder(
   val requestTimeoutMS = 30000
 
   val tokenExpirationInMinutes = tokenExpiration.toMinutes
-  val referer = "http://socrata.com/"
   private var cachedToken: String = _
   private var cachedTokenExpires = Long.MinValue
   private val tokenExpirationBufferMS = 60000L
