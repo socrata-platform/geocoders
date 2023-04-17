@@ -5,19 +5,13 @@ import com.rojoma.json.v3.io.{CompactJsonWriter, JsonReader}
 import com.rojoma.json.v3.interpolation._
 import com.rojoma.json.v3.matcher._
 import com.socrata.http.client.{SimpleHttpRequest, RequestBuilder, HttpClient}
-import com.rojoma.simplearm.v2.conversions._
-import com.rojoma.json.v3.conversions._
 
 import scala.concurrent.duration.FiniteDuration
 
 class EsriGeocoder(
   http: HttpClient,
-  tokenHost: String,
-  host: String,
-  username: String,
-  password: String,
-  referer: String,
-  tokenExpiration: FiniteDuration,
+  apiToken: String,
+  host: String, // probably "geocode.arcgis.com"
   batchSizeExpiration: FiniteDuration,
   metricProvider: (GeocodingResult, Long) => Unit,
   retryCount: Int = 5
@@ -26,13 +20,7 @@ class EsriGeocoder(
 
   val serviceDescription = RequestBuilder(host, secure = true).p("arcgis","rest","services","World","GeocodeServer").q("f" -> "json")
   val geocodingService = RequestBuilder(host, secure = true).p("arcgis","rest","services","World","GeocodeServer","geocodeAddresses")
-  val tokenService = RequestBuilder(tokenHost, secure = true).p("sharing","generateToken")
   val requestTimeoutMS = 30000
-
-  val tokenExpirationInMinutes = tokenExpiration.toMinutes
-  private var cachedToken: String = _
-  private var cachedTokenExpires = Long.MinValue
-  private val tokenExpirationBufferMS = 60000L
 
   val batchSizeExpirationInMinutes = batchSizeExpiration.toMinutes
   private var cachedBatchSize: Int = _
@@ -92,41 +80,6 @@ class EsriGeocoder(
       }
     }
     loop(retryCount)
-  }
-
-  private def renewToken() {
-    // http://resources.arcgis.com/en/help/arcgis-rest-api/index.html#//02r3000000n3000000
-
-    val body = Map(
-      "username" -> username,
-      "password" -> password,
-      "referer" -> referer,
-      "expiration" -> (tokenExpirationInMinutes + tokenExpirationBufferMS).max(Int.MaxValue).toInt.toString,
-      "f" -> "json"
-    )
-
-
-    val json = doPost(tokenService, body)
-
-    val tokenVar = Variable[String]()
-    val expiresVar = Variable[Long]()
-    val Pattern = PObject(
-      "token" -> tokenVar,
-      "expires" -> expiresVar
-    )
-
-    json match {
-      case Pattern(res) =>
-        cachedTokenExpires = expiresVar(res) - tokenExpirationBufferMS
-        cachedToken = tokenVar(res)
-      case other =>
-        fail("Didn't get a valid response from token request: " + other)
-    }
-  }
-
-  def token = synchronized {
-    if(cachedTokenExpires <= System.currentTimeMillis()) renewToken()
-    cachedToken
   }
 
   private def renewBatchSize() {
@@ -229,7 +182,7 @@ class EsriGeocoder(
     var body = Map(
       "addresses" -> CompactJsonWriter.toString(asObject),
       "outSR" -> outSR,
-      "token" -> token,
+      "token" -> apiToken,
       "f" -> "json"
     )
 
