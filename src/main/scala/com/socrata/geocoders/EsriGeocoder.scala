@@ -1,9 +1,11 @@
 package com.socrata.geocoders
 
 import com.rojoma.json.v3.ast.{JArray, JObject, JValue, JNumber, JNull}
+import com.rojoma.json.v3.codec.{JsonDecode, DecodeError}
 import com.rojoma.json.v3.io.{CompactJsonWriter, JsonReader}
 import com.rojoma.json.v3.interpolation._
 import com.rojoma.json.v3.matcher._
+import com.rojoma.json.v3.util.AutomaticJsonDecodeBuilder
 import com.socrata.http.client.{SimpleHttpRequest, RequestBuilder, HttpClient}
 
 import scala.concurrent.duration.FiniteDuration
@@ -165,6 +167,25 @@ class EsriGeocoder(
       fail("Unable to interpret geocoding result from esri: " + fromEsri)
   }
 
+  private def attemptToDecodeError(value: JValue): Option[String] = {
+    case class Error(message: String, details: Option[Seq[String]])
+    case class Envelope(error: Error)
+
+    implicit val errDec = AutomaticJsonDecodeBuilder[Error]
+    implicit val envDec = AutomaticJsonDecodeBuilder[Envelope]
+
+    JsonDecode.fromJValue[Envelope](value) match {
+      case Right(Envelope(Error(message, details))) =>
+        val assembledMessage =
+          message + details.filterNot(_.isEmpty).fold("") { details =>
+            ":\n" + details.map("  " + _).mkString("\n")
+          }
+        Some(assembledMessage)
+      case Left(_) =>
+        None
+    }
+  }
+
   def geocodeBatch(metric: (GeocodingResult, Long) => Unit, addresses: Seq[InternationalAddress]): Seq[(Option[LatLon], JValue)] = {
     if(addresses.isEmpty) return Nil
 
@@ -205,7 +226,13 @@ class EsriGeocoder(
       case Right(_) =>
         fail("`locations' field found but it wasn't an array!")
       case Left(err) =>
-        fail("No `locations' field found: " + err.english)
+        attemptToDecodeError(result) match {
+          case Some(err) =>
+            fail("Error from ESRI: " + err)
+          case None =>
+            log.error("Bad response: {}", result)
+            fail("No `locations' field found: " + err.english)
+        }
     }
   }
 }
